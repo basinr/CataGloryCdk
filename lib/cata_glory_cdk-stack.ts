@@ -2,8 +2,8 @@ import * as cdk from '@aws-cdk/core';
 import dynamodb = require('@aws-cdk/aws-dynamodb');
 import { Function, Runtime, Code, AssetCode } from '@aws-cdk/aws-lambda';
 import { LambdaRestApi, CfnAuthorizer, LambdaIntegration, AuthorizationType, IResource, MockIntegration, PassthroughBehavior } from '@aws-cdk/aws-apigateway';
-import { UserPool, CfnIdentityPool, CfnUserPoolIdentityProvider, CfnUserPoolDomain } from '@aws-cdk/aws-cognito';
-import { facebookSecret } from '../secrets.json';
+import { UserPool } from '@aws-cdk/aws-cognito';
+import CatagloryCognitoResources from './cognito_resources';
 
 export class CataGloryCdkStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
@@ -37,37 +37,23 @@ export class CataGloryCdkStack extends cdk.Stack {
       proxy: false,
     });
 
-    const game = backendApiGateway.root.addResource('GAME');
-    const backEndFunctionIntegration = new LambdaIntegration(backEndFunction);
-    game.addMethod('POST', backEndFunctionIntegration);
-    // addCorsOptions(game);
+    const userPool = CatagloryCognitoResources.createUserPoolResources(this);
 
-    const userPool = new UserPool(this, "userPool", {
-      selfSignUpEnabled: false
-    });
-
-    const facebookIdentityPool = new CfnUserPoolIdentityProvider(this, "facebookIdentityPool", {
-      userPoolId: userPool.userPoolId,
-      providerName: "Facebook",
-      providerType: "Facebook",
-      providerDetails: {
-        client_id: 206516657260300,
-        client_secret: facebookSecret,
-        authorize_scopes: "email"
-      }
-    });
-
-    const userPoolDomain = new CfnUserPoolDomain(this, "userPoolDomain", {
-      userPoolId: userPool.userPoolId,
-      domain: "cataglory"
-    });
-    
     const authorizer = new CfnAuthorizer(this, 'cfnAuth', {
       restApiId: backendApiGateway.restApiId,
       name: 'CatagloryBackAuthorizer',
       type: 'COGNITO_USER_POOLS',
       identitySource: 'method.request.header.Authorization',
       providerArns: [userPool.userPoolArn],
+    });
+
+    const game = backendApiGateway.root.addResource('GAME');
+    const backEndFunctionIntegration = new LambdaIntegration(backEndFunction);
+    game.addMethod('POST', backEndFunctionIntegration, {
+      authorizationType: AuthorizationType.COGNITO,
+      authorizer: {
+        authorizerId: authorizer.ref
+      }
     });
   }
 }
