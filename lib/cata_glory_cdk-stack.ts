@@ -6,16 +6,23 @@ import { UserPool } from '@aws-cdk/aws-cognito';
 import CatagloryCognitoResources from './cognito_resources';
 
 export class CataGloryCdkStack extends cdk.Stack {
+
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    let userGameTablePartitionKey: string = 'PartitionKey';
+    let userGameTableSortKey: string = 'SortKey';
 
-    const userGameTable = new dynamodb.Table(this, 'UserGames', {
+    const userGameTable = new dynamodb.Table(this, 'TheOneToRuleThemAll', {
       partitionKey: {
-        name: 'userId',
+        name: userGameTablePartitionKey,
         type: dynamodb.AttributeType.STRING
       },
-      tableName: 'UserGames',
+      sortKey: {
+        name: userGameTableSortKey, 
+        type: dynamodb.AttributeType.STRING
+      },
+      tableName: 'TheOneToRuleThemAll',
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
@@ -25,7 +32,8 @@ export class CataGloryCdkStack extends cdk.Stack {
       runtime: Runtime.NODEJS_10_X,
       environment: {
         TABLE_NAME: userGameTable.tableName,
-        PRIMARY_KEY: 'userId'
+        PRIMARY_KEY: userGameTablePartitionKey,
+        SORT_KEY: userGameTableSortKey
       }
     });
 
@@ -55,6 +63,13 @@ export class CataGloryCdkStack extends cdk.Stack {
         authorizerId: authorizer.ref
       }
     });
+    game.addMethod('GET', backEndFunctionIntegration, {
+      authorizationType: AuthorizationType.COGNITO,
+      authorizer: {
+        authorizerId: authorizer.ref
+      }
+    });
+    addCorsOptions(game);
   }
 }
 
