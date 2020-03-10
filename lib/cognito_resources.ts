@@ -6,11 +6,11 @@ import {Construct} from '@aws-cdk/core';
 
 
 export default class CatagloryCognitoResources {
-    static createUserPoolResources(scope: Construct): UserPool {
+    static createUserPoolResources(scope: Construct, callbackUrl: string): UserPool {
         const userPool = new UserPool(scope, "userPool", {
             selfSignUpEnabled: false
         });
-      
+
         const facebookIdentityPool = new CfnUserPoolIdentityProvider(scope, "facebookIdentityPool", {
             userPoolId: userPool.userPoolId,
             providerName: "Facebook",
@@ -31,8 +31,9 @@ export default class CatagloryCognitoResources {
             allowedOAuthScopes: [
                 'openid'
             ],
-            callbackUrLs: [ "http://localhost" ],
-            generateSecret: true,
+            callbackUrLs: [ callbackUrl ],
+            logoutUrLs: [ callbackUrl ],
+            generateSecret: false,
             supportedIdentityProviders: [
                 'Facebook'
             ]

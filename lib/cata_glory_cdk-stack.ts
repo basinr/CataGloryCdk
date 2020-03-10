@@ -1,9 +1,10 @@
 import * as cdk from '@aws-cdk/core';
 import dynamodb = require('@aws-cdk/aws-dynamodb');
-import { Function, Runtime, Code, AssetCode } from '@aws-cdk/aws-lambda';
+import { Function, Runtime, AssetCode } from '@aws-cdk/aws-lambda';
 import { LambdaRestApi, CfnAuthorizer, LambdaIntegration, AuthorizationType, IResource, MockIntegration, PassthroughBehavior } from '@aws-cdk/aws-apigateway';
-import { UserPool } from '@aws-cdk/aws-cognito';
 import CatagloryCognitoResources from './cognito_resources';
+import { Bucket } from '@aws-cdk/aws-s3';
+import { CloudFrontWebDistribution } from '@aws-cdk/aws-cloudfront';
 
 export class CataGloryCdkStack extends cdk.Stack {
 
@@ -12,6 +13,29 @@ export class CataGloryCdkStack extends cdk.Stack {
 
     let userGameTablePartitionKey: string = 'PartitionKey';
     let userGameTableSortKey: string = 'SortKey';
+    const staticWebsiteBucket = new Bucket(this, 'CataGlory-WilliamDev', {
+      bucketName: 'cataglorywilliamdev',
+      websiteIndexDocument: 'index.html',
+      publicReadAccess: true
+    });
+
+    const cloudFrontDistribution = new CloudFrontWebDistribution(this, 'MyDistribution', {
+      originConfigs: [
+          {
+              s3OriginSource: {
+                  s3BucketSource: staticWebsiteBucket
+              },
+              behaviors : [ {isDefaultBehavior: true}],
+          }
+      ],
+      errorConfigurations: [
+        {
+          errorCode: 403,
+          responseCode: 200,
+          responsePagePath: '/index.html'
+        }
+      ]
+   });  
 
     const userGameTable = new dynamodb.Table(this, 'TheOneToRuleThemAll', {
       partitionKey: {
@@ -37,7 +61,7 @@ export class CataGloryCdkStack extends cdk.Stack {
       }
     });
 
-    userGameTable.grantReadWriteData(backEndFunction)
+    userGameTable.grantReadWriteData(backEndFunction);
 
     const backendApiGateway = new LambdaRestApi(this, 'games', {
       restApiName: 'CataGlory Backend Service',
@@ -45,7 +69,7 @@ export class CataGloryCdkStack extends cdk.Stack {
       proxy: false,
     });
 
-    const userPool = CatagloryCognitoResources.createUserPoolResources(this);
+    const userPool = CatagloryCognitoResources.createUserPoolResources(this, "https://" + cloudFrontDistribution.domainName + "/");
 
     const authorizer = new CfnAuthorizer(this, 'cfnAuth', {
       restApiId: backendApiGateway.restApiId,
@@ -78,7 +102,7 @@ export function addCorsOptions(apiResource: IResource) {
     integrationResponses: [{
       statusCode: '200',
       responseParameters: {
-        'method.response.header.Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+        'method.response.header.Access-Control-Allow-Headers': "'Access-Control-Allow-Origin,Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
         'method.response.header.Access-Control-Allow-Origin': "'*'",
         'method.response.header.Access-Control-Allow-Credentials': "'false'",
         'method.response.header.Access-Control-Allow-Methods': "'OPTIONS,GET,PUT,POST,DELETE'",
