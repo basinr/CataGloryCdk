@@ -53,16 +53,6 @@ export const putNewGame= async (request: CreateNewGameRequest) : Promise <any> =
   }
 };
 
-// KeyConditions: {
-//   PRIMARY_KEY: {
-//     ComparisonOperator: 'EQ',
-//     AttributeValueList: [primaryKey]
-//   },
-//   SORT_KEY : {
-//     ComparisonOperator: 'BEGINS_WITH',
-//     AttributeValueList: ['CREATED']
-//   }
-// }
 
 export const getGames = async (getGamesRequest: GetGamesRequest) : Promise <any> => {
   const userId = getGamesRequest.userId;
