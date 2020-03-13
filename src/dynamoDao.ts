@@ -53,6 +53,7 @@ export const putNewGame= async (request: CreateNewGameRequest) : Promise <any> =
   }
 };
 
+// Test comment
 
 export const getGames = async (getGamesRequest: GetGamesRequest) : Promise <any> => {
   const userId = getGamesRequest.userId;
