@@ -9,7 +9,7 @@ export const handler = async (event: any = {}) : Promise <any> => {
       case "POST":
         return manager.createNewGame(event)
       case "GET":
-        return manager.getGamesForUser(event)
+        return manager.getGame(event)
     }
 
     return { statusCode: 201, body: 'HTTP Request not found or handled yet.' };
