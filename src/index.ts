@@ -1,17 +1,6 @@
-import * as manager from './gameManager';
+import app from './app';
+import awsServerlessExpress from 'aws-serverless-express';
 
-export const handler = async (event: any = {}) : Promise <any> => {
-    console.log("Incoming event: " + JSON.stringify(event));
-  
-    const httpMethod: String = event.requestContext.httpMethod;
-  
-    switch(httpMethod) {
-      case "POST":
-        return manager.createNewGame(event)
-      case "GET":
-        return manager.getGame(event)
-    }
+const server = awsServerlessExpress.createServer(app, undefined, ['application/json']);
 
-    return { statusCode: 201, body: 'HTTP Request not found or handled yet.' };
-  };
-  
+export const handler = (event: any, context: any) => awsServerlessExpress.proxy(server, event, context);

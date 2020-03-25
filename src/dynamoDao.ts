@@ -172,60 +172,31 @@ export const getGamesByState = async (getGamesRequest: GetGamesForUserRequest) :
   }
 };
 
-export const transactNewgame= async (request: CreateNewGameRequest) : Promise <any> => {
+export interface DynamoItem {
+  PartitionKey: string,
+  SortKey: string,
+  LastUpdatedDateTime?: string
+}
 
-  // console.log('will this uuid work' + Guid.create());
-  let dateToday = new Date();
-  // Need to declare this within the method in order for mocking to work correctly
-  let ddb = new AWS.DynamoDB.DocumentClient();  
-  console.log('Received request: ' + JSON.stringify(request));
-  let userItem: any = request.other_attributes;
-  userItem[PRIMARY_KEY] = request.userId;
+export function putItemsTransaciton(...items: DynamoItem[]): Promise<any> {
+  const dateToday = new Date();
+  const ddb = new AWS.DynamoDB.DocumentClient();
 
-  let gameId = dateToday.toISOString() + "-game";
-
-  userItem[SORT_KEY] = 'CREATED' + '|' + gameId + '|' + 1;
-
-  userItem[CREATED_TIME_KEY] = dateToday.toISOString();
-
-  let gameItem: any = {};
-  gameItem[PRIMARY_KEY] = gameId;
-  gameItem[SORT_KEY] = 'CREATED'+'|'+ request.userId;
-  gameItem[CREATED_TIME_KEY] = dateToday.toISOString();
-
-  try {
-    const params = {
-      TransactItems: [{
-        Put: {
-          TableName: TABLE_NAME,
-          Item: userItem
+  return Promise.resolve(items.map(item => {
+    item.LastUpdatedDateTime = dateToday.toISOString()
+    return item;
+  })).then(itemsWithDate => {
+    return {
+      TransactItems : itemsWithDate.map(item => {
+        return { 
+          Put: {
+            TableName: TABLE_NAME,
+            Item: item
+          }
         }
-      }, {
-        Put: {
-          TableName: TABLE_NAME,
-          Item: gameItem
-        }
-      }]
+      })
     };
-
-    console.log('Creating new game with parameters: ' + JSON.stringify(params));
-
-    const transactItems: Promise<any> = await ddb.transactWrite(params).promise();
-
-    console.log(JSON.stringify(params));
-    console.log('transactItems response' + JSON.stringify(transactItems));
-    return { 
-      statusCode: 200, 
-      body: JSON.stringify(params), 
-      headers: headersConfig
-    };
-  } catch (dbError) {
-    // const errorResponse = dbError.code === 'ValidationException' && dbError.message.includes('reserved keyword') ?
-    // DYNAMODB_EXECUTION_ERROR : RESERVED_RESPONSE;
-    console.log('There was an erorr in the PUT request: ' + dbError.message)
-    console.log(JSON.stringify(dbError));
-    return { 
-      statusCode: 500, body: dbError.message 
-    };
-  }
-};
+  }).then(transactItems => {
+    ddb.transactWrite(transactItems).promise()
+  });
+}

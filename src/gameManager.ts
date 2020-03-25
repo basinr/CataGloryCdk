@@ -1,8 +1,26 @@
 import * as dynamoDao from './dynamoDao'
+import { Guid } from 'guid-typescript';
+import { IdMinter } from './idMinter';
 
 export interface CreateNewGameRequest {
     userId: string,
-    other_attributes: {}
+    other_attributes?: {}
+}
+
+export interface CreateNewGameResponse {
+  userId: string,
+  gameId: string
+}
+
+export interface JoinGameRequest {
+  userId: string,
+  gameId: string,
+  other_attributes: {}
+}
+
+export interface JoinGameResponse {
+  userId: string,
+  gameId: string
 }
 
 export interface GetGamesForUserRequest {
@@ -18,28 +36,60 @@ export interface GetGamesByStateRequest {
   gameState: string
 }
 
-export const createNewGame= async (event: any = {}) : Promise <any> => {
-    let putItemRequest: CreateNewGameRequest = {
-        userId: '',
-        other_attributes: {}
-    }
-    
-    try {
-      const item = typeof event.body == 'object' ? event.body : JSON.parse(event.body);
-      putItemRequest.other_attributes = item;
-      putItemRequest.userId =  item.userId;
-    } catch (jsonParseError) {
-      console.log('Malformed request to create new game, error parsing json: ' + jsonParseError);
-      return { 
-        statusCode: 400, 
-        body: 'Malformed request to create new game, error parsing json: ' + jsonParseError
-      };
-    }
+export function createNewGame(request: CreateNewGameRequest) : Promise<CreateNewGameResponse> {
+  console.log(JSON.stringify(request));
 
-    return dynamoDao.transactNewgame(putItemRequest);
+  if (request.userId == null) {
+    throw new Error("You need to supply a userId!");
+  }
+
+  const gameId = IdMinter(); 
+
+  return dynamoDao.putItemsTransaciton(
+    {
+      PartitionKey: request.userId,
+      SortKey: "CREATED|" + gameId + "|" + request.userId,
+    },
+    {
+      PartitionKey: gameId,
+      SortKey: request.userId,
+    }
+  ).then(() => {
+    console.log("got here!!!!!!!!!!");
+  }).then(() => {
+    return {
+      userId: request.userId,
+      gameId: gameId
+    }
+  }).catch(err => {
+    console.log("found err : " + err);
+    throw err;
+  })
 };
 
-export const getGamesForUser= async(event: any= {}) : Promise <any> => {
+export async function joinGame(request: JoinGameRequest): Promise <JoinGameResponse> {
+  if (request.userId == null || request.gameId == null) {
+    throw new Error("400 You need to supply a userId and a gameId");
+  }
+
+  return dynamoDao.putItemsTransaciton(
+    {
+      PartitionKey: request.userId,
+      SortKey: "CREATED|" + request.gameId + "|" + request.userId,
+    },
+    {
+      PartitionKey: request.gameId,
+      SortKey: request.userId,
+    }
+  ).then(() => { 
+      return {
+        userId: request.userId,
+        gameId: request.gameId
+      }
+    });
+}
+
+export async function getGamesForUser(event: any= {}) : Promise <any> {
     let getGamesRequest: GetGamesForUserRequest = {
         userId: ''
     }
@@ -61,7 +111,7 @@ export const getGamesForUser= async(event: any= {}) : Promise <any> => {
     return dynamoDao.getGamesForUser(getGamesRequest);
 }
 
-export const getGame= async(event: any= {}) : Promise <any> => {
+export async function getGame(event: any= {}) : Promise <any> {
   let getGameRequest: GetGameRequest = {
       gameId: ''
   }
