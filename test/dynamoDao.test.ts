@@ -1,111 +1,120 @@
 import { CreateNewGameRequest, GetGamesForUserRequest, GetGameRequest } from "../src/gameManager";
-import { updateGame,getGamesForUser,getGame} from "../src/dynamoDao";
+import { getItemsByKey, DynamoItem, put} from "../src/dynamoDao";
 import * as AWSMock from "aws-sdk-mock";
-import * as AWS from "aws-sdk"; 
-import { PutItemInput,QueryInput } from "aws-sdk/clients/dynamodb";
+import * as Aws from 'aws-sdk';
+import { Converter, PutItemInput,QueryInput,QueryOutput } from "aws-sdk/clients/dynamodb";
 import * as sinon from "sinon";
+import { assert } from "console";
 
-describe('GetGamesForUser', () => {
-  jest.setTimeout(30000);
-it('should respond with correct values', async () => {
-    let testPartitionKey = "testUserId";
-    let testSortKey = "CREATED|0|1";
+describe('dynamoDao', () => {
+  const TABLE_NAME = 'TheOneToRuleThemAll';
+  const PRIMARY_KEY = 'PartitionKey';
 
-    AWSMock.setSDKInstance(AWS);
-    AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
-      callback(null, {PartitionKey: testPartitionKey, SortKey: testSortKey});
-    })
+  beforeEach(() => {
+    AWSMock.setSDKInstance(Aws);
+  })
+         
+  describe('putItemsTransaciton', () => {
+    const fakeDynamoObject = {
+      PartitionKey: "pk",
+      SortKey: "sk",
+      Gsi: "gsi",
+      GsiSortKey: "gsiSort"
+    } as DynamoItem;
 
-    let getGamesRequest: GetGamesForUserRequest = {
-        userId: testPartitionKey
+    const expectedPutItemsResponse = {
+      PartitionKey: "testPk", SortKey: "sortKey"
+    }
+
+    const expectedPutItemsRequest = {
+      TransactItems: [{ 
+          Put: {
+            TableName: TABLE_NAME,
+            Item: fakeDynamoObject
+          }
+        }]
     };
 
-    const getGamesResponse = await getGamesForUser(getGamesRequest);
+    it('calls returns the correct promise', async () => {
+      AWSMock.mock('DynamoDB.DocumentClient', 'put', (params: QueryInput, callback: Function) => {
+        callback(null, expectedPutItemsResponse)
+      });
 
-    const getGamesResponseBodyJson = JSON.parse(getGamesResponse['body']);
+      const putItems = await put(fakeDynamoObject);
+      
+      expect(putItems).toBe(expectedPutItemsResponse);
 
-    expect(getGamesResponse['statusCode']).toBe(200);
-    expect(getGamesResponseBodyJson['PartitionKey']).toBe(testPartitionKey);
-    expect(getGamesResponseBodyJson['SortKey']).toBe(testSortKey);
+      AWSMock.restore('DynamoDB.DocumentClient', 'transactWrite');
+    });
 
-    AWSMock.restore('DynamoDB.DocumentClient', 'query');
-  });
+    it('calls query with the correct params', async () => {
+      AWSMock.mock('DynamoDB.DocumentClient', 'put', (params: QueryInput, callback: Function) => {
+        expect(params).toMatchObject(expectedPutItemsRequest);
+        
+        callback(null, expectedPutItemsResponse)
+      });
 
-  // it('should query items with correct parameters', async () => {
-  //     let testPartitionKey = "testUserId";
-  //     let testSortKey = "CREATED|0|1";
-  //     let queryTableSpy = sinon.spy();
-
-  //     jest.setTimeout(30000);
-  //     AWSMock.setSDKInstance(AWS);
-  //     // AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
-  //     //   callback(null, {PartitionKey: testPartitionKey, SortKey: testSortKey});
-  //     // })
-  //     AWSMock.mock('DynamoDB.DocumentClient', 'query', queryTableSpy);
-
-  //     let getGamesRequest: GetGamesRequest = {
-  //         userId: testPartitionKey
-  //     };
-
-  //     const getGamesResponse = await getGames(getGamesRequest);
-  //     console.log('spy stuff: '+ queryTableSpy.getCalls);
-  //     expect(queryTableSpy.calledOnce).toBeTruthy();
-  // });
-})
-
-describe('GetGame', () => {
-  it('should get game info', async () => {
-    let gameId = "testGameId";
-
-    let testPartitionKey = gameId;
-    let testSortKey = "testGameId|1";
-
-    AWSMock.setSDKInstance(AWS);
-    AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
-      callback(null, {PartitionKey: testPartitionKey, SortKey: testSortKey});
+      await put(fakeDynamoObject);
+    
+      AWSMock.restore('DynamoDB.DocumentClient', 'transactWrite');
     })
+  })
 
-    let getGamesRequest: GetGameRequest = {
-      gameId: gameId
+  describe('getItemsForKey', () => {
+    const testKeyName = "testName";
+    const testKey = "testPk";
+
+    const fakeItems = [{
+      testParitionKeyName: testKeyName,
+      testPartitionKey: testKey
+    }];
+    const fakeDynamoResponse = {
+      Items: fakeItems,
+      Count: 5
+    } as Aws.DynamoDB.DocumentClient.QueryOutput;
+
+    const expectedQueryParams: Aws.DynamoDB.DocumentClient.QueryInput = {
+      TableName: TABLE_NAME,
+      KeyConditionExpression: testKeyName + ' = :keyVal',
+      ExpressionAttributeValues: {
+        ':keyVal':  testKey
+      }
     };
 
-    const getGameResponse = await getGame(getGamesRequest);
+    afterEach(() => {
+      AWSMock.restore('DynamoDB.DocumentClient', 'query');
+    });
 
-    const getGameResponseBodyJson = JSON.parse(getGameResponse['body']);
+    it('returns the correct promise', async () => {
+      AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
+        callback(null, fakeDynamoResponse)
+      });
 
-    expect(getGameResponse['statusCode']).toBe(200);
-    expect(getGameResponseBodyJson['PartitionKey']).toBe(testPartitionKey);
-    expect(getGameResponseBodyJson['SortKey']).toBe(testSortKey);
+      const getItems = await getItemsByKey(testKeyName, testKey);
 
-    AWSMock.restore('DynamoDB.DocumentClient', 'query');
+      expect(getItems).toBe(fakeItems);
+    });
 
+    it('calls dynamo with the correct parameters', async () => {
+      AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
+        expect(params).toMatchObject(expectedQueryParams);
+        
+        callback(null, fakeDynamoResponse)
+      });
+
+      await getItemsByKey(testKeyName, testKey);
+    });
+
+    describe('no items returned', async () => {
+      it('returns an empty array', async () => {
+        AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
+          callback(null, {})
+        });
+  
+        const getItems = await getItemsByKey(testKeyName, testKey);
+  
+        expect(getItems).toStrictEqual([]);
+      });  
+    });
   })
 })
-
-describe('CreateNewGame', () => {
-  jest.setTimeout(30000);
-
-  it('should update items', async () => {
-      let testPartitionKey = "testUserId";
-      let testSortKey = "CREATED|1|0";
-
-      AWSMock.setSDKInstance(AWS);
-      AWSMock.mock('DynamoDB.DocumentClient', 'put', (params: PutItemInput, callback: Function) => {
-        callback(null, {PartitionKey: testPartitionKey, SortKey: testSortKey});
-      })
-
-      let putItemRequest: CreateNewGameRequest = {
-        userId: 'testUserId',
-        other_attributes: {}
-      }
-      const newGameResponse = await updateGame(putItemRequest);
-
-      const putResponseBodyJson = JSON.parse(newGameResponse['body']);
-
-      expect(newGameResponse['statusCode']).toBe(200);
-      expect(putResponseBodyJson['Item']['PartitionKey']).toBe(testPartitionKey);
-      // expect(putResponseBodyJson['Item']['SortKey']).toBe(testSortKey); todo: use smarter expectation
-    });
-})  
-
-    //todo unit test for transact items

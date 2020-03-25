@@ -29,7 +29,7 @@ export default class CatagloryCognitoResources {
             ],
             allowedOAuthFlowsUserPoolClient: true,
             allowedOAuthScopes: [
-                'openid'
+                'openid', 'profile'
             ],
             callbackUrLs: [ callbackUrl ],
             logoutUrLs: [ callbackUrl ],

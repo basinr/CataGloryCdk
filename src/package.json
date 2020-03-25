@@ -1,22 +1,19 @@
 {
-  "name": "cata_glory_cdk",
-  "version": "0.1.0",
-  "bin": {
-    "cata_glory_cdk": "bin/cata_glory_cdk.js"
-  },
+  "name": "cata_glory_backend",
+  "version": "1.0.0",
+  "description": "Backend lambda",
+  "main": "index.ts",
   "scripts": {
     "build": "tsc",
-    "watch": "tsc -w",
-    "test": "jest",
-    "deploy": "zip -r lambdas.zip src/* node_modules/* && cdk deploy",
-    "cdk": "cdk"
+    "test": "jest"
   },
+  "author": "",
+  "license": "ISC",
   "devDependencies": {
     "@aws-cdk/assert": "1.26.0",
     "@shelf/jest-dynamodb": "^1.7.0",
     "@types/jest": "^24.0.22",
     "@types/node": "10.17.5",
-    "aws-cdk": "1.26.0",
     "aws-sdk-mock": "^5.1.0",
     "dynamodb-local": "0.0.31",
     "guid-typescript": "^1.0.9",
@@ -28,20 +25,14 @@
     "typescript": "~3.7.2"
   },
   "dependencies": {
-    "@aws-cdk/aws-apigateway": "^1.27.0",
-    "@aws-cdk/aws-cloudfront": "^1.27.0",
-    "@aws-cdk/aws-cognito": "^1.27.0",
-    "@aws-cdk/aws-dynamodb": "^1.27.0",
-    "@aws-cdk/aws-lambda": "^1.27.0",
-    "@aws-cdk/aws-s3": "^1.27.0",
-    "@aws-cdk/aws-s3-deployment": "^1.27.0",
-    "@aws-cdk/core": "1.27.0",
     "@types/aws-serverless-express": "^3.3.3",
+    "@types/body-parser": "^1.19.0",
     "@types/compression": "^1.7.0",
     "@types/cors": "^2.8.6",
     "@types/express": "^4.17.3",
     "@types/sinon": "^7.5.2",
     "aws-serverless-express": "^3.3.6",
+    "body-parser": "^1.19.0",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
     "express": "^4.17.1",
