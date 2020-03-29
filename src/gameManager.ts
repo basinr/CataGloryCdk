@@ -1,6 +1,6 @@
 import * as dynamoDao from './dynamoDao'
 import * as idMinter from './idMinter';
-import { response } from 'express';
+import { response, request } from 'express';
 
 export interface CreateNewGameRequest {
     userId: string,
@@ -21,10 +21,6 @@ export interface JoinGameRequest {
 export interface JoinGameResponse {
   userId: string,
   gameId: string
-}
-
-export interface GetGamesForUserRequest {
-    userId: string
 }
 
 export interface GetGameRequest {
@@ -50,6 +46,20 @@ export interface GetGamesByStateRequest {
 export interface GameItemDynamoDB extends dynamoDao.DynamoItem {
   Host: boolean,
   Score: number
+}
+
+export interface GetGamesForUserResponse {
+  games: BasicGameInfo[]
+}
+
+export interface BasicGameInfo {
+  userId: string,
+  gameId: string
+}
+
+export interface GetGamesForUserRequest {
+  userId: string,
+  state?: string
 }
 
 export function createNewGame(request: CreateNewGameRequest) : Promise<CreateNewGameResponse> {
@@ -105,36 +115,38 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
   })
 }
 
-export async function getGamesForUser(event: any= {}) : Promise <any> {
-    let getGamesRequest: GetGamesForUserRequest = {
-        userId: ''
-    }
 
-    try {
-      const userId = event.queryStringParameters.userId;
-      if (!userId) {
-        return { statusCode: 400, body: `Error: You are missing queryStringParameters` };
-      }
-      getGamesRequest.userId =  userId;
-    } catch (jsonParseError) {
-      console.log('Malformed request to create new game, error parsing json: ' + jsonParseError);
-      return { 
-        statusCode: 400, 
-        body: 'Malformed request to create new game, error parsing json: ' + jsonParseError
-      };
-    }
-
-    return dynamoDao.getGamesForUser(getGamesRequest);
+export function getGamesForUser(userId: string, state?: string) : Promise <GetGamesForUserResponse> {
+  const sortKeyQuery: dynamoDao.SortKeyQuery | undefined = state ? {
+    sortKeyName: dynamoDao.PRIMARY_SORT_KEY, 
+    sortKeyPrefix: state
+  } : undefined;
+  
+  return dynamoDao.getItemsByIndexAndSortKey({
+    indexName: dynamoDao.PRIMARY_KEY, 
+    indexValue: userId
+  }, sortKeyQuery).then(items => {
+      return {
+        games: items.map(item => {
+          return {
+            userId: item.PartitionKey,
+            gameId: item.Gsi
+          }
+        })
+      }}
+    );
 }
 
 export async function getGame(request: GetGameRequest) : Promise <GetGameResponse> {
-  return dynamoDao.getItemsByKey(dynamoDao.GSI_KEY, request.gameId)
-    .then(items => {
+  return dynamoDao.getItemsByIndexAndSortKey({
+    indexName: dynamoDao.GSI_KEY, 
+    indexValue: request.gameId
+  }).then(items => {
       console.log("Response : " + JSON.stringify(response));
       return {
-        hostUserId: items.filter((item: any) => item.Host)[0].PartitionKey,
+        hostUserId: items.filter(item => item.Host)[0].PartitionKey,
         gameId: request.gameId,
-        players: items.map((item: any) => {
+        players: items.map(item => {
           return {
             userId: item.PartitionKey,
             score: item.Score

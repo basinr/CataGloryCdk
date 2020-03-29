@@ -1,10 +1,7 @@
-import { CreateNewGameRequest, GetGamesForUserRequest, GetGameRequest } from "../src/gameManager";
-import { getItemsByKey, DynamoItem, put} from "../src/dynamoDao";
+import { DynamoItem, put, getItemsByIndexAndSortKey, IndexQuery, SortKeyQuery} from "../src/dynamoDao";
 import * as AWSMock from "aws-sdk-mock";
 import * as Aws from 'aws-sdk';
-import { Converter, PutItemInput,QueryInput,QueryOutput } from "aws-sdk/clients/dynamodb";
-import * as sinon from "sinon";
-import { assert } from "console";
+import { QueryInput } from "aws-sdk/clients/dynamodb";
 
 describe('dynamoDao', () => {
   const TABLE_NAME = 'TheOneToRuleThemAll';
@@ -12,7 +9,7 @@ describe('dynamoDao', () => {
 
   beforeEach(() => {
     AWSMock.setSDKInstance(Aws);
-  })
+  });
          
   describe('putItemsTransaciton', () => {
     const fakeDynamoObject = {
@@ -60,9 +57,11 @@ describe('dynamoDao', () => {
     })
   })
 
-  describe('getItemsForKey', () => {
+  describe('getItemsByKeyWithSortKeyPrefix', () => {
     const testKeyName = "testName";
     const testKey = "testPk";
+    const testSortKeyName = "testSortKeyName";
+    const testSortKeyPrefix = "testPrefix";
 
     const fakeItems = [{
       testParitionKeyName: testKeyName,
@@ -73,48 +72,111 @@ describe('dynamoDao', () => {
       Count: 5
     } as Aws.DynamoDB.DocumentClient.QueryOutput;
 
-    const expectedQueryParams: Aws.DynamoDB.DocumentClient.QueryInput = {
-      TableName: TABLE_NAME,
-      KeyConditionExpression: testKeyName + ' = :keyVal',
-      ExpressionAttributeValues: {
-        ':keyVal':  testKey
-      }
+    const sampleKeyQuery: IndexQuery = {
+      indexName: testKeyName, 
+      indexValue: testKey
     };
+    const sampleSortQuery: SortKeyQuery = {
+      sortKeyName: testSortKeyName, 
+      sortKeyPrefix: testSortKeyPrefix
+    };
+
 
     afterEach(() => {
       AWSMock.restore('DynamoDB.DocumentClient', 'query');
     });
 
-    it('returns the correct promise', async () => {
-      AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
-        callback(null, fakeDynamoResponse)
-      });
-
-      const getItems = await getItemsByKey(testKeyName, testKey);
-
-      expect(getItems).toBe(fakeItems);
-    });
-
-    it('calls dynamo with the correct parameters', async () => {
-      AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
-        expect(params).toMatchObject(expectedQueryParams);
-        
-        callback(null, fakeDynamoResponse)
-      });
-
-      await getItemsByKey(testKeyName, testKey);
-    });
-
-    describe('no items returned', async () => {
-      it('returns an empty array', async () => {
+    describe('sort key index is not defined', () => {
+      const expectedQueryParams: Aws.DynamoDB.DocumentClient.QueryInput = {
+        TableName: TABLE_NAME,
+        KeyConditionExpression: '#k = :key',
+        ExpressionAttributeNames: {
+          '#k': testKeyName
+        },
+        ExpressionAttributeValues: {
+          ':key':  testKey
+        }
+      };
+  
+      it('returns the correct promise', async () => {
         AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
-          callback(null, {})
+          callback(null, fakeDynamoResponse)
         });
   
-        const getItems = await getItemsByKey(testKeyName, testKey);
+        const getItems = await getItemsByIndexAndSortKey(sampleKeyQuery);
   
-        expect(getItems).toStrictEqual([]);
+        expect(getItems).toBe(fakeItems);
+      });
+  
+      it('calls dynamo with the correct parameters', async () => {
+        AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
+          expect(params).toMatchObject(expectedQueryParams);
+          
+          callback(null, fakeDynamoResponse)
+        });
+  
+        await getItemsByIndexAndSortKey(sampleKeyQuery);
+      });
+  
+      describe('no items returned', () => {
+        it('returns an empty array', async () => {
+          AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
+            callback(null, {})
+          });
+    
+          const getItems = await getItemsByIndexAndSortKey(sampleKeyQuery);
+    
+          expect(getItems).toStrictEqual([]);
+        });  
       });  
     });
-  })
-})
+
+    describe('sort key index is defined', () => {
+      const expectedQueryParams: Aws.DynamoDB.DocumentClient.QueryInput = {
+        TableName: TABLE_NAME,
+        KeyConditionExpression: '#k = :key and begins_with(#sk, :skeybeginswith)',
+        ExpressionAttributeNames:{
+          '#k': testKeyName,
+          '#sk': testSortKeyName
+        },
+        ExpressionAttributeValues: {
+          ':key': testKey,
+          ':skeybeginswith': testSortKeyPrefix
+        }
+      };
+  
+
+      it('returns the correct promise', async () => {
+        AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
+          callback(null, fakeDynamoResponse)
+        });
+  
+        const getItems = await getItemsByIndexAndSortKey(sampleKeyQuery, sampleSortQuery);
+  
+        expect(getItems).toBe(fakeItems);
+      });
+  
+      it('calls dynamo with the correct parameters', async () => {
+        AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
+          expect(params).toMatchObject(expectedQueryParams);
+          
+          callback(null, fakeDynamoResponse)
+        });
+  
+        await getItemsByIndexAndSortKey(sampleKeyQuery, sampleSortQuery);
+      });
+  
+      describe('no items returned', async () => {
+        it('returns an empty array', async () => {
+          AWSMock.mock('DynamoDB.DocumentClient', 'query', (params: QueryInput, callback: Function) => {
+            callback(null, {})
+          });
+    
+          const getItems = await getItemsByIndexAndSortKey(sampleKeyQuery, sampleSortQuery);
+    
+          expect(getItems).toStrictEqual([]);
+        });  
+      });
+    });  
+  });
+});

@@ -13,7 +13,7 @@ describe('gameManager', () => {
     const idMinterSpy = jest.spyOn(idMinter, 'mint');
     const dateSpy = jest.spyOn(Date, 'now');
     const putSpy = jest.spyOn(dynamoDao, 'put');
-    const getByKeySpy = jest.spyOn(dynamoDao, 'getItemsByKey');
+    const getByKeySpy = jest.spyOn(dynamoDao, 'getItemsByIndexAndSortKey');
 
     beforeEach(() => {
         dateSpy.mockImplementation(() => dateTimeEpoch);
@@ -130,7 +130,7 @@ describe('gameManager', () => {
         } as gameManager.GetGameResponse;
 
         beforeEach(() => {
-            getByKeySpy.mockImplementation((keyName: string, key: string) =>
+            getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) =>
                 Promise.resolve([{
                     PartitionKey: hostUserId,
                     Score: score1,
@@ -158,7 +158,86 @@ describe('gameManager', () => {
             });
 
             expect(getByKeySpy).toBeCalledTimes(1);
-            expect(getByKeySpy).toBeCalledWith(dynamoDao.GSI_KEY, newlyMintedId);
+            expect(getByKeySpy).toBeCalledWith({
+                indexName: dynamoDao.GSI_KEY, 
+                indexValue: newlyMintedId
+            });
         });
-    })
+    });
+
+    describe('getGamesForUser', () => {
+        const userId = 'William';
+        const gameId1 = 'Game1';
+        const gameId2 = 'Game2';
+        const state = 'PENDING';
+        
+        const expectedGetGameResponse = {
+            games: [
+                {
+                    userId: userId,
+                    gameId: gameId1
+                },
+                {
+                    userId: userId,
+                    gameId: gameId2
+                }
+            ]
+        } as gameManager.GetGamesForUserResponse;
+
+        beforeEach(() => {
+            getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) =>
+                Promise.resolve([{
+                    PartitionKey: userId,
+                    Gsi: gameId1
+                } as {[key: string]: any; },
+                {
+                    PartitionKey: userId,
+                    Gsi: gameId2
+                }as {[key: string]: any; }
+            ]));
+        });
+
+        describe ('when the state is not given', () => {
+            it('returns the expected result', async () => {
+                const gameResponse = await gameManager.getGamesForUser(userId);
+    
+                expect(gameResponse).toStrictEqual(expectedGetGameResponse)
+            });
+    
+            it('calls the correct dao methods', async () => {
+                await gameManager.getGamesForUser(userId);
+    
+                expect(getByKeySpy).toBeCalledTimes(1);
+                expect(getByKeySpy).toBeCalledWith({
+                    indexName: dynamoDao.PRIMARY_KEY, 
+                    indexValue: userId
+                }, undefined);
+            });
+    
+        });
+
+        describe('when the state is given', () => {
+            it('returns the expected result', async () => {
+                const gameResponse = await gameManager.getGamesForUser(userId, state);
+    
+                expect(gameResponse).toStrictEqual(expectedGetGameResponse)
+            });
+    
+            it('calls the correct dao methods', async () => {
+                await gameManager.getGamesForUser(userId, state);
+    
+                expect(getByKeySpy).toBeCalledTimes(1);
+                expect(getByKeySpy).toBeCalledWith({
+                    indexName: dynamoDao.PRIMARY_KEY, 
+                    indexValue: userId
+                }, 
+                {
+                    sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
+                    sortKeyPrefix: state
+                });
+            });
+
+        });
+    });
+
 });

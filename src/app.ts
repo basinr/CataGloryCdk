@@ -2,20 +2,33 @@
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import awsServerlessExpressMiddleware from 'aws-serverless-express/middleware';
-import { createNewGame, joinGame, getGame, getGamesForUser } from './gameManager';
+import { 
+    createNewGame, 
+    joinGame, 
+    getGame, 
+    getGamesForUser 
+} from './gameManager';
 import compression from 'compression';
 
 const app = express();
 const router = express.Router();
 
-// router.use(compression());
+router.use(compression());
 router.use(cors());
 router.use(bodyParser.json());
 router.use(bodyParser.urlencoded({ extended: true }));
 router.use(awsServerlessExpressMiddleware.eventContext());
 
-router.get('/GAMES', async (req,  res) => {
-    res.json(await getGamesForUser(req));
+router.get('/GAMES/:userId', async (req,  res) => {
+    const response = await getGamesForUser(req.params.userId)
+    res.send(JSON.stringify(response));
+});
+
+router.get('/GAMES/:userId/:state', async (req,  res) => {
+    console.log("userId : " + req.params.userId);
+    console.log("state : " + req.params.state);
+    const response = await getGamesForUser(req.params.userId, req.params.state);
+    res.send(JSON.stringify(response));
 });
 
 router.get('/GAME/:gameId', async (req,  res) => {
