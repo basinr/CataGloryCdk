@@ -16,6 +16,8 @@ export interface DynamoItem {
 }
 
 export function put(item: DynamoItem): Promise<void> {
+  console.log("Dynamo Object that is being put : " + JSON.stringify(item));
+
   const ddb = new Aws.DynamoDB.DocumentClient();
   
   const transactionParams: DocumentClient.PutItemInput = {

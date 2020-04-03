@@ -6,6 +6,7 @@ import { exitCode } from 'process';
 describe('gameManager', () => {
     const newlyMintedId = 'abc123';
     const sampleUserId = 'userId';
+    const sampleNickName = "Ronnie";
 
     const dateTimeEpoch = 795329084000;
     const dateTimeString = new Date(dateTimeEpoch).toISOString();
@@ -36,6 +37,7 @@ describe('gameManager', () => {
             SortKey: "CREATED|" + newlyMintedId,
             Gsi: newlyMintedId,
             GsiSortKey: sampleUserId,
+            Nickname: sampleNickName,
             Host: true,
             Score: 0,
             CreatedDateTime: dateTimeString
@@ -47,7 +49,8 @@ describe('gameManager', () => {
 
         it('calls dynamoDao with correct params', async () => {
             await gameManager.createNewGame({
-                userId: sampleUserId
+                userId: sampleUserId,
+                nickname: sampleNickName
             });
 
             expect(putSpy).toHaveBeenCalledTimes(1);
@@ -56,7 +59,8 @@ describe('gameManager', () => {
 
         it('returns with correct userId and gameid', async () => {
             const gameResponse = await gameManager.createNewGame({
-                userId: sampleUserId
+                userId: sampleUserId,
+                nickname: sampleNickName
             });
 
             expect(gameResponse).toMatchObject(expectedCreateGameResponse);
@@ -72,13 +76,14 @@ describe('gameManager', () => {
             SortKey: "CREATED|" + sampleGameId,
             Gsi: sampleGameId,
             GsiSortKey: sampleUserId,
+            Nickname: sampleNickName,
             Host: false,
             Score: 0,
             CreatedDateTime: dateTimeString
         } as gameManager.GameItemDynamoDB;
-        const expectedCreateGameResponse = {
+        const expectedJoinGameResponse = {
             userId: sampleUserId,
-            gameId: newlyMintedId
+            gameId: sampleGameId
         };
 
         const putSpy = jest.spyOn(dynamoDao, 'put');
@@ -92,7 +97,8 @@ describe('gameManager', () => {
         it('calls dynamoDao with correct params', async () => {
             await gameManager.joinGame({
                 userId: sampleUserId,
-                gameId: sampleGameId
+                gameId: sampleGameId,
+                nickname: sampleNickName
             });
 
             expect(putSpy).toHaveBeenCalledTimes(1);
@@ -100,30 +106,38 @@ describe('gameManager', () => {
         });
 
         it('returns with correct userId and gameid', async () => {
-            const gameResponse = await gameManager.createNewGame({
-                userId: sampleUserId
+            const gameResponse = await gameManager.joinGame({
+                userId: sampleUserId,
+                gameId: sampleGameId,
+                nickname: sampleNickName
             });
 
-            expect(gameResponse).toStrictEqual(expectedCreateGameResponse);
+            expect(gameResponse).toStrictEqual(expectedJoinGameResponse);
         });
     });
 
     describe('getGame', () => {
-        const hostUserId = 'William';
-        const otherUserId = 'Ronnie';
+        const hostUserId = '1234';
+        const userId1Nickname = 'William';
+        const otherUserId = '4567';
+        const userId2Nickname = 'Ronnie';
         const score1 = 1;
         const score2 = 0;
         
         const expectedGetGameResponse = {
-            hostUserId: hostUserId,
+            host: {
+                userId: hostUserId,
+            },
             gameId: newlyMintedId,
             players: [
                 {
                     userId: hostUserId,
+                    nickname: userId1Nickname,
                     score: score1
-                } as gameManager.Player, 
+                }, 
                 {
                     userId: otherUserId,
+                    nickname: userId2Nickname,
                     score: score2
                 }
             ]
@@ -133,11 +147,13 @@ describe('gameManager', () => {
             getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) =>
                 Promise.resolve([{
                     PartitionKey: hostUserId,
+                    Nickname: userId1Nickname,
                     Score: score1,
                     Host: true
                 } as {[key: string]: any; },
                 {
                     PartitionKey: otherUserId,
+                    Nickname: userId2Nickname,
                     Score: score2,
                     Host: false
                 }as {[key: string]: any; }

@@ -4,7 +4,7 @@ import { response, request } from 'express';
 
 export interface CreateNewGameRequest {
     userId: string,
-    other_attributes?: {}
+    nickname: string
 }
 
 export interface CreateNewGameResponse {
@@ -15,7 +15,7 @@ export interface CreateNewGameResponse {
 export interface JoinGameRequest {
   userId: string,
   gameId: string,
-  other_attributes?: {}
+  nickname: string
 }
 
 export interface JoinGameResponse {
@@ -29,13 +29,19 @@ export interface GetGameRequest {
 
 export interface Player {
   userId: string,
+  nickname: string
+}
+
+export interface PlayerGameData {
+  userId: string,
+  nickname: string
   score: number
 }
 
 export interface GetGameResponse {
   gameId: string,
-  hostUserId: string,
-  players: Player[]
+  host: Player,
+  players: PlayerGameData[]
 }
 
 export interface GetGamesByStateRequest {
@@ -44,6 +50,7 @@ export interface GetGamesByStateRequest {
 }
 
 export interface GameItemDynamoDB extends dynamoDao.DynamoItem {
+  Nickname: string,
   Host: boolean,
   Score: number
 }
@@ -74,6 +81,7 @@ export function createNewGame(request: CreateNewGameRequest) : Promise<CreateNew
       SortKey: "CREATED|" + gameId,
       Gsi: gameId,
       GsiSortKey: request.userId,
+      Nickname: request.nickname,
       Host: true,
       Score: 0,
       CreatedDateTime: dateString
@@ -90,6 +98,8 @@ export function createNewGame(request: CreateNewGameRequest) : Promise<CreateNew
 };
 
 export async function joinGame(request: JoinGameRequest): Promise <JoinGameResponse> {
+  console.log(JSON.stringify(request));
+
   const dateString = new Date(Date.now()).toISOString();
 
   const item: GameItemDynamoDB = {
@@ -97,12 +107,11 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
     SortKey: "CREATED|" + request.gameId,
     Gsi: request.gameId,
     GsiSortKey: request.userId,
+    Nickname: request.nickname,
     Host: false,
     Score: 0,
     CreatedDateTime: dateString
   };
-
-  console.log(JSON.stringify(item));
 
   return dynamoDao.put(item).then(() => {
     return {
@@ -144,12 +153,16 @@ export async function getGame(request: GetGameRequest) : Promise <GetGameRespons
   }).then(items => {
       console.log("Response : " + JSON.stringify(response));
       return {
-        hostUserId: items.filter(item => item.Host)[0].PartitionKey,
+        host: {
+          userId: items.filter(item => item.Host)[0].PartitionKey,
+          nickname: items.filter(item => item.Host)[0].Nickname
+        },
         gameId: request.gameId,
         players: items.map(item => {
           return {
             userId: item.PartitionKey,
-            score: item.Score
+            score: item.Score,
+            nickname: item.Nickname
           }
         })
       }

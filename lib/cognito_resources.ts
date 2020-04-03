@@ -31,8 +31,8 @@ export default class CatagloryCognitoResources {
             allowedOAuthScopes: [
                 'openid', 'profile'
             ],
-            callbackUrLs: [ callbackUrl ],
-            logoutUrLs: [ callbackUrl ],
+            callbackUrLs: [ callbackUrl, "http://localhost:3000/" ],
+            logoutUrLs: [ callbackUrl, "http://localhost:3000/" ],
             generateSecret: false,
             supportedIdentityProviders: [
                 'Facebook'
