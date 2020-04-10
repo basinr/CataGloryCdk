@@ -3,7 +3,7 @@
 *.d.ts
 node_modules
 secrets*
-
+coverage/
 # CDK asset staging directory
 .cdk.staging
 cdk.out

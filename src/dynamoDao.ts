@@ -10,8 +10,8 @@ export const GSI_SORT_KEY = 'Gsi';
 export interface DynamoItem {
   PartitionKey: string,
   SortKey: string,
-  Gsi: string,
-  GsiSortKey: string,
+  Gsi?: string,
+  GsiSortKey?: string,
   CreatedDateTime: string
 }
 
@@ -20,12 +20,12 @@ export function put(item: DynamoItem): Promise<void> {
 
   const ddb = new Aws.DynamoDB.DocumentClient();
   
-  const transactionParams: DocumentClient.PutItemInput = {
+  const putParams: DocumentClient.PutItemInput = {
     TableName: TABLE_NAME,
     Item: item
   };
   
-  return ddb.put(transactionParams).promise().then();
+  return ddb.put(putParams).promise().then();
 }
 
 export interface IndexQuery {
@@ -79,4 +79,23 @@ export function getItemsByIndexAndSortKey(indexQuery: IndexQuery, sortKeyQuery?:
     + " = " + JSON.stringify(getItemsRequest));
 
   return ddb.query(getItemsRequest).promise().then(response => response.Items ?? []);
+}
+
+export function transactPut(...items: DynamoItem[]): Promise<void> {
+  const ddb = new Aws.DynamoDB.DocumentClient();
+
+  const transactWriteParams = {
+    TransactItems: items.map(item => {
+      return {
+        Put: {
+          TableName: TABLE_NAME,
+          Item: item
+        }
+      }
+    })
+  } as DocumentClient.TransactWriteItemsInput;
+
+  console.log(JSON.stringify(transactWriteParams));
+
+  return ddb.transactWrite(transactWriteParams).promise().then(() => {});
 }

@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "test": "jest",
+    "test": "jest --silent --coverage",
     "deploy": "zip -r lambdas.zip src/* node_modules/* && cdk deploy",
     "cdk": "cdk"
   },

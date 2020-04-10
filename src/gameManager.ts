@@ -1,6 +1,8 @@
 import * as dynamoDao from './dynamoDao'
 import * as idMinter from './idMinter';
+import * as randomLetterGenerator from './randomLetterGenerator';
 import { response, request } from 'express';
+import { defaultCategories } from './defaultCategories';
 
 export interface CreateNewGameRequest {
     userId: string,
@@ -53,6 +55,20 @@ export interface GameItemDynamoDB extends dynamoDao.DynamoItem {
   Nickname: string,
   Host: boolean,
   Score: number
+  GameId: string,
+  UserId: string, 
+  Round: number
+}
+
+export interface Question {
+  QuestionNumber: number,
+  Category: string
+}
+
+export interface QuestionDynamoDB extends dynamoDao.DynamoItem {
+  Letter: string,
+  Categories: Question[],
+  Round: number
 }
 
 export interface GetGamesForUserResponse {
@@ -62,6 +78,14 @@ export interface GetGamesForUserResponse {
 export interface BasicGameInfo {
   userId: string,
   gameId: string
+}
+
+export const QuestionPrefx = 'QUESTION';
+export enum GameStates {
+  Created = "CREATED",
+  Pending = "PENDING",
+  Waiting = "WAITING",
+  Completed = "COMPLETED"
 }
 
 export interface GetGamesForUserRequest {
@@ -75,26 +99,34 @@ export function createNewGame(request: CreateNewGameRequest) : Promise<CreateNew
   const gameId = idMinter.mint(); 
   const dateString = new Date(Date.now()).toISOString();
 
-  return dynamoDao.put(
+  return dynamoDao.transactPut(
     {
       PartitionKey: request.userId,
-      SortKey: "CREATED|" + gameId,
+      SortKey: GameStates.Created + '|' + gameId + '|' + 1,
       Gsi: gameId,
       GsiSortKey: request.userId,
       Nickname: request.nickname,
+      Round: 1,
+      UserId: request.userId,
+      GameId: gameId,
       Host: true,
       Score: 0,
       CreatedDateTime: dateString
     } as GameItemDynamoDB,
+    {
+      PartitionKey: gameId,
+      SortKey: QuestionPrefx + '|' + 1,
+      Letter: randomLetterGenerator.generate(),
+      Categories: defaultCategories[1],
+      Round: 1,
+      CreatedDateTime: dateString
+    } as QuestionDynamoDB
   ).then(() => {
     return {
       userId: request.userId,
       gameId: gameId
     }
-  }).catch(err => {
-    console.log("found err : " + err);
-    throw err;
-  })
+  });
 };
 
 export async function joinGame(request: JoinGameRequest): Promise <JoinGameResponse> {
@@ -104,10 +136,13 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
 
   const item: GameItemDynamoDB = {
     PartitionKey: request.userId,
-    SortKey: "CREATED|" + request.gameId,
+    SortKey: GameStates.Created + '|' + request.gameId + '|' + 1,
     Gsi: request.gameId,
     GsiSortKey: request.userId,
     Nickname: request.nickname,
+    Round: 1,
+    UserId: request.userId,
+    GameId: request.gameId,
     Host: false,
     Score: 0,
     CreatedDateTime: dateString
@@ -118,10 +153,7 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
       userId: request.userId,
       gameId: request.gameId
     }
-  }).catch(err => {
-    console.log("found err : " + err);
-    throw err;
-  })
+  });
 }
 
 
@@ -138,15 +170,15 @@ export function getGamesForUser(userId: string, state?: string) : Promise <GetGa
       return {
         games: items.map(item => {
           return {
-            userId: item.PartitionKey,
-            gameId: item.Gsi
+            userId: item.UserId,
+            gameId: item.GameId
           }
         })
       }}
     );
 }
 
-export async function getGame(request: GetGameRequest) : Promise <GetGameResponse> {
+export function getGame(request: GetGameRequest) : Promise <GetGameResponse> {
   return dynamoDao.getItemsByIndexAndSortKey({
     indexName: dynamoDao.GSI_KEY, 
     indexValue: request.gameId
@@ -160,7 +192,7 @@ export async function getGame(request: GetGameRequest) : Promise <GetGameRespons
         gameId: request.gameId,
         players: items.map(item => {
           return {
-            userId: item.PartitionKey,
+            userId: item.UserId,
             score: item.Score,
             nickname: item.Nickname
           }

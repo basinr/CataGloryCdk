@@ -6,4 +6,11 @@ module.exports = {
     "transform": {
       "^.+\\.tsx?$": "ts-jest"
     },
+    "collectCoverageFrom": [
+      "**/*.{js,jsx}",
+      "!**/node_modules/**",
+      "!**/vendor/**",
+      "!**/bin/**",
+      "!**/test/**"
+    ]
   }
