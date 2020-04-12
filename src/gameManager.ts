@@ -102,7 +102,7 @@ export function createNewGame(request: CreateNewGameRequest) : Promise<CreateNew
   return dynamoDao.transactPut(
     {
       PartitionKey: request.userId,
-      SortKey: GameStates.Created + '|' + gameId + '|' + 1,
+      SortKey: GameStates.Pending + '|' + gameId + '|' + 1,
       Gsi: gameId,
       GsiSortKey: request.userId,
       Nickname: request.nickname,
@@ -136,7 +136,7 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
 
   const item: GameItemDynamoDB = {
     PartitionKey: request.userId,
-    SortKey: GameStates.Created + '|' + request.gameId + '|' + 1,
+    SortKey: GameStates.Pending + '|' + request.gameId + '|' + 1,
     Gsi: request.gameId,
     GsiSortKey: request.userId,
     Nickname: request.nickname,

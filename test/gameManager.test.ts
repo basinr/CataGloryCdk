@@ -44,7 +44,7 @@ describe('gameManager', () => {
     describe('createNewGame', () => {
         const expectedUserGameItem = {
             PartitionKey: sampleUserId,
-            SortKey: gameManager.GameStates.Created + '|' + newlyMintedId + '|' + 1,
+            SortKey: gameManager.GameStates.Pending + '|' + newlyMintedId + '|' + 1,
             Gsi: newlyMintedId,
             GsiSortKey: sampleUserId,
             Nickname: sampleNickName,
@@ -94,7 +94,7 @@ describe('gameManager', () => {
 
         const expectedUserGameItem = {
             PartitionKey: sampleUserId,
-            SortKey: gameManager.GameStates.Created + '|' + sampleGameId + '|' + 1,
+            SortKey: gameManager.GameStates.Pending + '|' + sampleGameId + '|' + 1,
             Gsi: sampleGameId,
             GsiSortKey: sampleUserId,
             Nickname: sampleNickName,
