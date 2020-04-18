@@ -81,6 +81,7 @@ export interface BasicGameInfo {
 }
 
 export const QuestionPrefx = 'QUESTION';
+export const GamePrefix = 'GAME';
 export enum GameStates {
   Created = "CREATED",
   Pending = "PENDING",
@@ -102,9 +103,9 @@ export function createNewGame(request: CreateNewGameRequest) : Promise<CreateNew
   return dynamoDao.transactPut(
     {
       PartitionKey: request.userId,
-      SortKey: GameStates.Pending + '|' + gameId + '|' + 1,
+      SortKey: GamePrefix + '|' + GameStates.Pending + '|' + gameId + '|' + 1,
       Gsi: gameId,
-      GsiSortKey: request.userId,
+      GsiSortKey: GamePrefix + '|' + request.userId,
       Nickname: request.nickname,
       Round: 1,
       UserId: request.userId,
@@ -136,9 +137,9 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
 
   const item: GameItemDynamoDB = {
     PartitionKey: request.userId,
-    SortKey: GameStates.Pending + '|' + request.gameId + '|' + 1,
+    SortKey: GamePrefix + '|' + GameStates.Pending + '|' + request.gameId + '|' + 1,
     Gsi: request.gameId,
-    GsiSortKey: request.userId,
+    GsiSortKey: GamePrefix + '|' + request.userId,
     Nickname: request.nickname,
     Round: 1,
     UserId: request.userId,
@@ -157,11 +158,11 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
 }
 
 
-export function getGamesForUser(userId: string, state?: string) : Promise <GetGamesForUserResponse> {
-  const sortKeyQuery: dynamoDao.SortKeyQuery | undefined = state ? {
+export async function getGamesForUser(userId: string, state = "") : Promise <GetGamesForUserResponse> {
+  const sortKeyQuery: dynamoDao.SortKeyQuery = {
     sortKeyName: dynamoDao.PRIMARY_SORT_KEY, 
-    sortKeyPrefix: state
-  } : undefined;
+    sortKeyPrefix: GamePrefix + '|' + state
+  };
   
   return dynamoDao.getItemsByIndexAndSortKey({
     indexName: dynamoDao.PRIMARY_KEY, 
@@ -178,10 +179,13 @@ export function getGamesForUser(userId: string, state?: string) : Promise <GetGa
     );
 }
 
-export function getGame(request: GetGameRequest) : Promise <GetGameResponse> {
+export async function getGame(request: GetGameRequest) : Promise <GetGameResponse> {
   return dynamoDao.getItemsByIndexAndSortKey({
     indexName: dynamoDao.GSI_KEY, 
     indexValue: request.gameId
+  },{
+    sortKeyName: dynamoDao.GSI_SORT_KEY,
+    sortKeyPrefix: GamePrefix
   }).then(items => {
       console.log("Response : " + JSON.stringify(response));
       return {

@@ -44,9 +44,9 @@ describe('gameManager', () => {
     describe('createNewGame', () => {
         const expectedUserGameItem = {
             PartitionKey: sampleUserId,
-            SortKey: gameManager.GameStates.Pending + '|' + newlyMintedId + '|' + 1,
+            SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + newlyMintedId + '|' + 1,
             Gsi: newlyMintedId,
-            GsiSortKey: sampleUserId,
+            GsiSortKey: gameManager.GamePrefix + '|' + sampleUserId,
             Nickname: sampleNickName,
             Round: 1,
             GameId: newlyMintedId,
@@ -94,9 +94,9 @@ describe('gameManager', () => {
 
         const expectedUserGameItem = {
             PartitionKey: sampleUserId,
-            SortKey: gameManager.GameStates.Pending + '|' + sampleGameId + '|' + 1,
+            SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + sampleGameId + '|' + 1,
             Gsi: sampleGameId,
-            GsiSortKey: sampleUserId,
+            GsiSortKey: gameManager.GamePrefix + '|' + sampleUserId,
             Nickname: sampleNickName,
             Round: 1,
             GameId: sampleGameId,
@@ -196,6 +196,9 @@ describe('gameManager', () => {
             expect(getByKeySpy).toBeCalledWith({
                 indexName: dynamoDao.GSI_KEY, 
                 indexValue: newlyMintedId
+            },{
+                sortKeyName: dynamoDao.GSI_SORT_KEY,
+                sortKeyPrefix: gameManager.GamePrefix
             });
         });
     });
@@ -250,7 +253,10 @@ describe('gameManager', () => {
                 expect(getByKeySpy).toBeCalledWith({
                     indexName: dynamoDao.PRIMARY_KEY, 
                     indexValue: userId
-                }, undefined);
+                }, {
+                    sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
+                    sortKeyPrefix: gameManager.GamePrefix + "|"
+                });
             });
     
         });
@@ -272,7 +278,7 @@ describe('gameManager', () => {
                 }, 
                 {
                     sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
-                    sortKeyPrefix: state
+                    sortKeyPrefix: gameManager.GamePrefix + '|' + state
                 });
             });
 
