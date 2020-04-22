@@ -5,14 +5,14 @@ const TABLE_NAME = 'TheOneToRuleThemAll';
 export const PRIMARY_KEY = 'PartitionKey';
 export const PRIMARY_SORT_KEY = 'SortKey';
 export const GSI_KEY = 'Gsi';
-export const GSI_SORT_KEY = 'Gsi';
+export const GSI_SORT_KEY = 'GsiSortKey';
 
 export interface DynamoItem {
   PartitionKey: string,
   SortKey: string,
   Gsi?: string,
   GsiSortKey?: string,
-  CreatedDateTime: string
+  CreatedDateTime?: string
 }
 
 export function put(item: DynamoItem): Promise<void> {
@@ -38,7 +38,7 @@ export interface SortKeyQuery {
   sortKeyPrefix: string
 }
 
-export function getItemsByIndexAndSortKey(indexQuery: IndexQuery, sortKeyQuery?: SortKeyQuery): Promise<{[key: string]: any}[]> {
+export async function getItemsByIndexAndSortKey(indexQuery: IndexQuery, sortKeyQuery?: SortKeyQuery): Promise<{[key: string]: any}[]> {
   const ddb = new Aws.DynamoDB.DocumentClient();
 
   let conditionExpression = '#k = :key';
@@ -81,7 +81,7 @@ export function getItemsByIndexAndSortKey(indexQuery: IndexQuery, sortKeyQuery?:
   return ddb.query(getItemsRequest).promise().then(response => response.Items ?? []);
 }
 
-export function transactPut(...items: DynamoItem[]): Promise<void> {
+export async function transactPut(...items: DynamoItem[]): Promise<void> {
   const ddb = new Aws.DynamoDB.DocumentClient();
 
   const transactWriteParams = {
@@ -97,5 +97,31 @@ export function transactPut(...items: DynamoItem[]): Promise<void> {
 
   console.log(JSON.stringify(transactWriteParams));
 
+  return ddb.transactWrite(transactWriteParams).promise().then(() => {});
+}
+
+export async function updateItemWithKeyChange(oldItem: DynamoItem, newItem: DynamoItem): Promise<void> {
+  const ddb = new Aws.DynamoDB.DocumentClient();
+
+  const transactWriteParams = {
+    TransactItems: [
+      { 
+        Put: {
+          TableName: TABLE_NAME,
+          Item: newItem
+        }
+      }, {
+        Delete: {
+          TableName: TABLE_NAME,
+          Key: {
+            PartitionKey: oldItem.PartitionKey,
+            SortKey: oldItem.SortKey
+          }
+        }
+      }]
+  } as DocumentClient.TransactWriteItemsInput;
+
+  console.log(JSON.stringify(transactWriteParams));
+  
   return ddb.transactWrite(transactWriteParams).promise().then(() => {});
 }

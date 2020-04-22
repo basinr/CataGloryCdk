@@ -8,6 +8,7 @@ import { defaultCategories } from '../src/defaultCategories';
 describe('gameManager', () => {
     const newlyMintedId = 'abc123';
     const sampleUserId = 'userId';
+    const sampleGameId = 'gameId';
     const sampleNickName = "Ronnie";
     const randomlyGeneratedLetter = 'a';
 
@@ -20,6 +21,7 @@ describe('gameManager', () => {
     const putSpy = jest.spyOn(dynamoDao, 'put');
     const getByKeySpy = jest.spyOn(dynamoDao, 'getItemsByIndexAndSortKey');
     const transactPutSpy = jest.spyOn(dynamoDao, 'transactPut');
+    const udpateKeySpy = jest.spyOn(dynamoDao, 'updateItemWithKeyChange');
 
     beforeEach(() => {
         idMinterSpy.mockImplementation(() => newlyMintedId);
@@ -31,6 +33,9 @@ describe('gameManager', () => {
         transactPutSpy.mockImplementation((...arg: dynamoDao.DynamoItem[]) => 
             Promise.resolve()
         );
+        udpateKeySpy.mockImplementation((oldItem: dynamoDao.DynamoItem, newItem: dynamoDao.DynamoItem) =>
+            Promise.resolve()
+        );
     });
 
     afterEach(() => {
@@ -39,12 +44,13 @@ describe('gameManager', () => {
         putSpy.mockClear();
         getByKeySpy.mockClear();
         transactPutSpy.mockClear();
+        udpateKeySpy.mockClear();
     });
 
     describe('createNewGame', () => {
         const expectedUserGameItem = {
             PartitionKey: sampleUserId,
-            SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + newlyMintedId + '|' + 1,
+            SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + newlyMintedId,
             Gsi: newlyMintedId,
             GsiSortKey: gameManager.GamePrefix + '|' + sampleUserId,
             Nickname: sampleNickName,
@@ -53,6 +59,7 @@ describe('gameManager', () => {
             UserId: sampleUserId,
             Host: true,
             Score: 0,
+            State: gameManager.GameStates.Pending,
             CreatedDateTime: dateTimeString
         } as gameManager.GameItemDynamoDB;
         const expectedQuestion = {
@@ -94,7 +101,7 @@ describe('gameManager', () => {
 
         const expectedUserGameItem = {
             PartitionKey: sampleUserId,
-            SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + sampleGameId + '|' + 1,
+            SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + sampleGameId,
             Gsi: sampleGameId,
             GsiSortKey: gameManager.GamePrefix + '|' + sampleUserId,
             Nickname: sampleNickName,
@@ -103,6 +110,7 @@ describe('gameManager', () => {
             UserId: sampleUserId,
             Host: false,
             Score: 0,
+            State: gameManager.GameStates.Pending,
             CreatedDateTime: dateTimeString
         } as gameManager.GameItemDynamoDB;
         const expectedJoinGameResponse = {
@@ -285,4 +293,74 @@ describe('gameManager', () => {
         });
     });
 
+    describe('endRound', () => {
+        const sampleRound = 1;
+        describe('when there exists a current round in PENDING', () => {
+            beforeEach(() => {
+                getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) =>
+                    Promise.resolve([{
+                        PartitionKey: sampleUserId,
+                        UserId: sampleUserId,
+                        GameId: sampleGameId,
+                        State: gameManager.GameStates.Pending
+                        } as {[key: string]: any; },
+                    ])
+                );
+            });
+
+            it('queries for the correct rows', async () => {
+                await gameManager.endRound({
+                    userId: sampleUserId,
+                    gameId: sampleGameId,
+                });
+
+                expect(getByKeySpy).toHaveBeenCalledTimes(1);
+                expect(getByKeySpy).toHaveBeenCalledWith({
+                    indexName: dynamoDao.PRIMARY_KEY,
+                    indexValue: sampleUserId
+                }, {
+                    sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
+                    sortKeyPrefix: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + sampleGameId
+                });
+            });
+
+            it('updates dynamo with the correct params', async () => {
+                await gameManager.endRound({
+                    userId: sampleUserId,
+                    gameId: sampleGameId
+                });
+
+                expect(udpateKeySpy).toHaveBeenCalledTimes(1);
+                expect(udpateKeySpy).toHaveBeenLastCalledWith(
+                    {
+                        PartitionKey: sampleUserId,
+                        SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + sampleGameId
+                    }, 
+                    {
+                        PartitionKey: sampleUserId,
+                        SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Waiting + '|' + sampleGameId,
+                        State: gameManager.GameStates.Waiting,
+                        GameId: sampleGameId,
+                        UserId: sampleUserId
+                    }
+                );
+            });
+        })
+
+        describe('when there does not exist a current round in PENDING', () => {
+            beforeEach(() => {
+                getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) =>
+                    Promise.resolve([])
+                );
+            });
+
+
+            it('throws an exception', async () => {
+                await expect(gameManager.endRound({
+                    userId: sampleUserId,
+                    gameId: sampleGameId
+                })).rejects.toBeInstanceOf(Error);
+            });
+        })
+    });
 });

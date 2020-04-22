@@ -57,7 +57,8 @@ export interface GameItemDynamoDB extends dynamoDao.DynamoItem {
   Score: number
   GameId: string,
   UserId: string, 
-  Round: number
+  Round: number,
+  State: GameStates
 }
 
 export interface Question {
@@ -103,7 +104,7 @@ export function createNewGame(request: CreateNewGameRequest) : Promise<CreateNew
   return dynamoDao.transactPut(
     {
       PartitionKey: request.userId,
-      SortKey: GamePrefix + '|' + GameStates.Pending + '|' + gameId + '|' + 1,
+      SortKey: GamePrefix + '|' + GameStates.Pending + '|' + gameId,
       Gsi: gameId,
       GsiSortKey: GamePrefix + '|' + request.userId,
       Nickname: request.nickname,
@@ -112,7 +113,8 @@ export function createNewGame(request: CreateNewGameRequest) : Promise<CreateNew
       GameId: gameId,
       Host: true,
       Score: 0,
-      CreatedDateTime: dateString
+      CreatedDateTime: dateString,
+      State: GameStates.Pending
     } as GameItemDynamoDB,
     {
       PartitionKey: gameId,
@@ -137,7 +139,7 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
 
   const item: GameItemDynamoDB = {
     PartitionKey: request.userId,
-    SortKey: GamePrefix + '|' + GameStates.Pending + '|' + request.gameId + '|' + 1,
+    SortKey: GamePrefix + '|' + GameStates.Pending + '|' + request.gameId,
     Gsi: request.gameId,
     GsiSortKey: GamePrefix + '|' + request.userId,
     Nickname: request.nickname,
@@ -146,7 +148,8 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
     GameId: request.gameId,
     Host: false,
     Score: 0,
-    CreatedDateTime: dateString
+    CreatedDateTime: dateString,
+    State: GameStates.Pending
   };
 
   return dynamoDao.put(item).then(() => {
@@ -155,8 +158,7 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
       gameId: request.gameId
     }
   });
-}
-
+};
 
 export async function getGamesForUser(userId: string, state = "") : Promise <GetGamesForUserResponse> {
   const sortKeyQuery: dynamoDao.SortKeyQuery = {
@@ -177,7 +179,7 @@ export async function getGamesForUser(userId: string, state = "") : Promise <Get
         })
       }}
     );
-}
+};
 
 export async function getGame(request: GetGameRequest) : Promise <GetGameResponse> {
   return dynamoDao.getItemsByIndexAndSortKey({
@@ -203,4 +205,36 @@ export async function getGame(request: GetGameRequest) : Promise <GetGameRespons
         })
       }
   });
+};
+
+export interface EndRoundRequest {
+  userId: string,
+  gameId: string
+};
+
+export async function endRound(request: EndRoundRequest): Promise<void> {
+  const oldSortKeyPrefix = GamePrefix + '|' + GameStates.Pending + '|' + request.gameId;
+
+  const currentRound = await dynamoDao.getItemsByIndexAndSortKey(
+    {
+      indexName: dynamoDao.PRIMARY_KEY,
+      indexValue: request.userId
+    }, {
+      sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
+      sortKeyPrefix: oldSortKeyPrefix
+    }
+  );
+
+  if (currentRound.length == 0) return Promise.reject(new Error('Cannot update the round'));
+
+  const gameRow = currentRound[0] as GameItemDynamoDB;
+  gameRow.SortKey = GamePrefix + '|'  + GameStates.Waiting + '|' + request.gameId;
+  gameRow.State = GameStates.Waiting;
+  return dynamoDao.updateItemWithKeyChange(
+    {
+      PartitionKey: request.userId,
+      SortKey: oldSortKeyPrefix 
+    }, 
+    gameRow
+  );
 }

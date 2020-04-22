@@ -1,8 +1,9 @@
-import { DynamoItem, put, getItemsByIndexAndSortKey, IndexQuery, SortKeyQuery, transactPut, GSI_KEY, GSI_SORT_KEY, PRIMARY_SORT_KEY} from "../src/dynamoDao";
+import { DynamoItem, put, getItemsByIndexAndSortKey, IndexQuery, SortKeyQuery, transactPut, GSI_KEY, GSI_SORT_KEY, PRIMARY_SORT_KEY, updateItemWithKeyChange} from "../src/dynamoDao";
 import * as AWSMock from "aws-sdk-mock";
 import * as Aws from 'aws-sdk';
 import { DocumentClient, QueryInput } from "aws-sdk/clients/dynamodb";
 import { fake } from "sinon";
+import { networkInterfaces } from "os";
 
 
 describe('dynamoDao', () => {
@@ -261,4 +262,54 @@ describe('dynamoDao', () => {
       expect(timesCalled).toBe(1);
     });
   });
+
+  describe('updateItemWithKeyChange', () => {
+    const oldItem = {
+      PartitionKey: 'pk1',
+      SortKey: 'sk1',
+      CreatedDateTime: 'date'
+    } as DynamoItem;
+    const newIrem = {
+      PartitionKey: 'pk1',
+      SortKey: 'sk2',
+      CreatedDateTime: 'date'
+    } as DynamoItem;
+
+    const transactWriteParams = {
+      TransactItems: [
+        {
+          Put: {
+            TableName: TABLE_NAME,
+            Item: newIrem
+          }
+        },
+        {
+          Delete: {
+            TableName: TABLE_NAME,
+            Key: {
+              PartitionKey: oldItem.PartitionKey,
+              SortKey: oldItem.SortKey
+            }
+          }
+        }
+      ]
+    } as DocumentClient.TransactWriteItemsInput;
+  
+
+    it('calls transactWrite with the correct params', async () => {
+      let timesCalled = 0;
+      AWSMock.mock('DynamoDB.DocumentClient', 'transactWrite', (params: Aws.DynamoDB.DocumentClient.PutItemInput, callback: Function) => {
+        expect(params).toMatchObject(transactWriteParams);
+
+        timesCalled++;
+        
+        callback(null, null)
+      });
+
+      await updateItemWithKeyChange(oldItem, newIrem);
+
+      expect(timesCalled).toBe(1);
+    });
+  });
+
 });

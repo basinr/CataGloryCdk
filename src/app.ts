@@ -6,7 +6,8 @@ import {
     createNewGame, 
     joinGame, 
     getGame, 
-    getGamesForUser 
+    getGamesForUser, 
+    endRound
 } from './gameManager';
 import compression from 'compression';
 import { getQuestions, putAnswer } from './answerManager';
@@ -61,7 +62,10 @@ router.put('/ANSWER', async(req, res) => {
 });
 
 router.post('/ROUND/:userId/:gameId', async(req, res) => {
-    
+    await endRound({
+        userId: req.params.userId,
+        gameId: req.params.gameId
+    });
 
     res.send('Success');
 });
