@@ -1,5 +1,5 @@
 import * as dynamoDao from '../src/dynamoDao';
-import { QuestionPrefx, GameStates } from '../src/gameManager';
+import { QuestionPrefx, GameStates, GamePrefix } from '../src/gameManager';
 import { defaultCategories } from '../src/defaultCategories';
 import { putAnswer, AnswerPrefix, getQuestions } from '../src/answerManager';
 
@@ -112,7 +112,7 @@ describe('answerManager', () => {
                     },
                     {
                         sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
-                        sortKeyPrefix: GameStates.Pending + '|' + sampleGameId + '|' + sampleRound    
+                        sortKeyPrefix: GamePrefix + '|' + GameStates.Pending + '|' + sampleGameId    
                     });
             });
         });
@@ -121,7 +121,8 @@ describe('answerManager', () => {
             beforeEach(async () => {
                 getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) => Promise.resolve([{
                     PartitionKey: sampleUserId,
-                    SortKey: sampleGameId
+                    SortKey: sampleGameId,
+                    Round: sampleRound
                 }]));
 
                 await putAnswer({
@@ -142,7 +143,7 @@ describe('answerManager', () => {
                     },
                     {
                         sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
-                        sortKeyPrefix: GameStates.Pending + '|' + sampleGameId + '|' + sampleRound    
+                        sortKeyPrefix: GamePrefix + '|' + GameStates.Pending + '|' + sampleGameId    
                     });
             });
         
@@ -161,6 +162,26 @@ describe('answerManager', () => {
                         QuestionNumber: sampleQuestionNumber,
                         Answer: sampleAnswer
                     });
+            });
+
+            describe('gameItem exists with a different round', () => {
+                beforeEach(async () => {
+                    getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) => Promise.resolve([{
+                        PartitionKey: sampleUserId,
+                        SortKey: sampleGameId,
+                        Round: sampleRound + 1
+                    }]));
+                });
+    
+                it('rejects this with an error', async () => {
+                    await expect(putAnswer({
+                        userId: sampleUserId,
+                        gameId: sampleGameId,
+                        round: sampleRound,
+                        questionNumber: sampleQuestionNumber,
+                        answer: sampleAnswer
+                    })).rejects.toBeInstanceOf(Error);
+                });    
             });
         });
     });

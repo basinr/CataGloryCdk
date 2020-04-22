@@ -1,5 +1,5 @@
 import * as dynamoDao from "./dynamoDao";
-import { QuestionPrefx, GameStates } from "./gameManager";
+import { QuestionPrefx, GameStates, GameItemDynamoDB, GamePrefix } from "./gameManager";
 
 export interface GetAnswerRequest {
     userId: string,
@@ -57,17 +57,19 @@ export interface AnswerDynamoItem extends dynamoDao.DynamoItem {
 export const AnswerPrefix = 'ANSWER';
 
 export async function putAnswer(request: PutAnswerRequest): Promise<void> {
-    const gameItem = await dynamoDao.getItemsByIndexAndSortKey(
+    const gameItems = await dynamoDao.getItemsByIndexAndSortKey(
     {
         indexName: dynamoDao.PRIMARY_KEY,
         indexValue: request.userId
     },
     {
         sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
-        sortKeyPrefix: GameStates.Pending + '|' + request.gameId + '|' + request.round,
-    });
+        sortKeyPrefix: GamePrefix + '|' + GameStates.Pending + '|' + request.gameId,
+    }) as GameItemDynamoDB[];
 
-    if (gameItem.length == 0) {
+    console.log(JSON.stringify(gameItems));
+
+    if (gameItems.length == 0 || gameItems[0].Round != request.round) {
         throw new Error('This user is not allowed to submit an answer for this question');
     }
 
