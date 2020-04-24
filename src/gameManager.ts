@@ -83,6 +83,7 @@ export interface BasicGameInfo {
 
 export const QuestionPrefx = 'QUESTION';
 export const GamePrefix = 'GAME';
+export const AnswerPrefix = 'ANSWER';
 export enum GameStates {
   Created = "CREATED",
   Pending = "PENDING",

@@ -17,8 +17,10 @@ export class CataGloryCdkStack extends cdk.Stack {
     const userGameTableGsi = 'Gsi';
     const userGameTableGsiSortKey = 'GsiSortKey';
 
-    const staticWebsiteBucket = new Bucket(this, 'CataGlory-WilliamDev', {
-      bucketName: 'cataglorywilliamdev',
+    // CataGlory-RonnieDev
+    const staticWebsiteBucket = new Bucket(this, 'CataGlory-RonnieDev', {
+      // catagloryronniedev: Ronnie
+      bucketName: 'catagloryronniedev',
       websiteIndexDocument: 'index.html',
       publicReadAccess: true
     });

@@ -10,7 +10,7 @@ import {
     endRound
 } from './gameManager';
 import compression from 'compression';
-import { getQuestions, putAnswer } from './answerManager';
+import { getQuestions, putAnswer, getAnswers } from './answerManager';
 
 const app = express();
 const router = express.Router();
@@ -59,6 +59,12 @@ router.put('/ANSWER', async(req, res) => {
     await putAnswer(req.body);
 
     res.send('Success');
+});
+
+router.get('/ANSWERS/:gameId/:round', async (req, res) => {
+    const response = await getAnswers({gameId: req.params.gameId, round: req.params.round as unknown as number});
+
+    res.send(JSON.stringify(response));
 });
 
 router.post('/ROUND/:userId/:gameId', async(req, res) => {

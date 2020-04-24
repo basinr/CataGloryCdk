@@ -1,7 +1,7 @@
 import * as dynamoDao from '../src/dynamoDao';
 import { QuestionPrefx, GameStates, GamePrefix } from '../src/gameManager';
 import { defaultCategories } from '../src/defaultCategories';
-import { putAnswer, AnswerPrefix, getQuestions } from '../src/answerManager';
+import { putAnswer, AnswerPrefix, getQuestions, getAnswers } from '../src/answerManager';
 
 describe('answerManager', () => {
     describe('getQuestions', () => {
@@ -183,6 +183,84 @@ describe('answerManager', () => {
                     })).rejects.toBeInstanceOf(Error);
                 });    
             });
+        });
+    });
+
+    describe('getAnswers', () => {
+        const sampleGameId = 'game123';
+        const sampleRound = 1;
+
+        const sampleUserId = "fred";
+        const sampleUserId2 = "sarah";
+
+        const sampleQuestionNumber = 1;
+        const sampleQuestionNumber2 = 2;
+        const sampleAnswer = "answer1";
+        const sampleAnswer2 = "answer2";
+
+        const getByKeySpy = jest.spyOn(dynamoDao, 'getItemsByIndexAndSortKey');
+
+        afterEach(() => {
+            getByKeySpy.mockClear();
+        });
+
+        describe('answers exist', () => {
+            beforeEach(() => {
+                getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) =>
+                    Promise.resolve([
+                        {
+                            QuestionNumber: sampleQuestionNumber,
+                            Answer: sampleAnswer,
+                            UserId : sampleUserId } as {[key: string]: any; },
+                        {
+                            QuestionNumber: sampleQuestionNumber2,
+                            Answer: sampleAnswer2,
+                            UserId : sampleUserId2 } as {[key: string]: any; },
+                    ])
+                );
+            });
+        
+            it('calls dao with correct params', async () => {
+                await getAnswers({gameId: sampleGameId, round: sampleRound});
+        
+                expect(getByKeySpy).toHaveBeenCalledTimes(1);
+                expect(getByKeySpy).toHaveBeenCalledWith(
+                    {
+                        indexName: dynamoDao.GSI_KEY,
+                        indexValue: sampleGameId
+                    },
+                    {
+                        sortKeyName: dynamoDao.GSI_SORT_KEY,
+                        sortKeyPrefix: AnswerPrefix + '|' + sampleRound   
+                    });
+            });
+        
+            it('resolves with the correct response', async () => {
+                await expect(getAnswers({gameId: sampleGameId, round: sampleRound})).resolves.toStrictEqual({answers: [
+                    {
+                        questionNumber: sampleQuestionNumber,
+                        answer: sampleAnswer,
+                        userId: sampleUserId
+                    },
+                    {
+                        questionNumber: sampleQuestionNumber2,
+                        answer: sampleAnswer2,
+                        userId: sampleUserId2
+                    }
+                ]});
+            });
+        });
+
+        describe('if answers do not exist', () => {
+            beforeEach(() => {
+                getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) =>
+                    Promise.resolve([])
+                );
+            });
+
+            it('throws an exception', async () => {
+                await expect(getAnswers({gameId: sampleGameId, round: sampleRound})).rejects.toBeInstanceOf(Error);
+            })
         });
     });
 });

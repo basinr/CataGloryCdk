@@ -1,19 +1,13 @@
 import * as dynamoDao from "./dynamoDao";
 import { QuestionPrefx, GameStates, GameItemDynamoDB, GamePrefix } from "./gameManager";
 
-export interface GetAnswerRequest {
-    userId: string,
-    gameId: string,
-    round: number
-};
-
-export interface GetAnswerResponse {
+export interface GetQuestionsResponse {
     letter: string,
     categories: string[],
     round: number
 }
-  
-export async function getQuestions(gameId: string, round: number): Promise<GetAnswerResponse> {
+
+export async function getQuestions(gameId: string, round: number): Promise<GetQuestionsResponse> {
     return dynamoDao.getItemsByIndexAndSortKey(
         {
             indexName: dynamoDao.PRIMARY_KEY,
@@ -87,4 +81,52 @@ export async function putAnswer(request: PutAnswerRequest): Promise<void> {
         QuestionNumber: request.questionNumber,
         Answer: request.answer
     } as AnswerDynamoItem).then();
+}
+
+export interface GetAnswersRequest {
+    gameId: string,
+    round: number
+};
+
+export interface GetAnswersResponse {
+    answers: any
+}
+
+export interface UserAnswer {
+    questionNumber: number,
+    userId: string,
+    answer: string
+}
+
+export async function getAnswers(request: GetAnswersRequest): Promise<GetAnswersResponse> {
+    const answerResponse: GetAnswersResponse = {
+        answers: []
+    };
+
+    return dynamoDao.getItemsByIndexAndSortKey(
+        {
+            indexName: dynamoDao.GSI_KEY,
+            indexValue: request.gameId
+        },
+        {
+            sortKeyName: dynamoDao.GSI_SORT_KEY,
+            sortKeyPrefix: AnswerPrefix + '|' + request.round,
+        })
+        .then(items => {
+            if (items.length == 0) {
+                throw new Error('400 no answers found');
+            }
+    
+            return items
+        })
+        .then(items => {
+            items.forEach(row => {
+                answerResponse.answers.push({
+                    questionNumber: row.QuestionNumber,
+                    answer: row.Answer,
+                    userId: row.UserId
+                });
+            });
+            return answerResponse;
+        });
 }
