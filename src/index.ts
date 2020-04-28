@@ -1,4 +1,4 @@
-import app from './app';
+import app from './backendRouter/app';
 import awsServerlessExpress from 'aws-serverless-express';
 
 const server = awsServerlessExpress.createServer(app, undefined, ['application/json']);

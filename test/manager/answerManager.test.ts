@@ -1,7 +1,7 @@
-import * as dynamoDao from '../src/dynamoDao';
-import { QuestionPrefx, GameStates, GamePrefix } from '../src/gameManager';
-import { defaultCategories } from '../src/defaultCategories';
-import { putAnswer, AnswerPrefix, getQuestions, getAnswers } from '../src/answerManager';
+import * as dynamoDao from '../../src/dao/dynamoDao';
+import { GameStates, GamePrefix } from '../../src/manager/gameManager';
+import { defaultCategories } from '../../src/manager/defaultCategories';
+import { putAnswer, AnswerPrefix, getQuestions, QuestionPrefx, getAnswers } from '../../src/manager/answerManager';
 
 describe('answerManager', () => {
     describe('getQuestions', () => {

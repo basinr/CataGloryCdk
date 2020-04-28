@@ -1,14 +1,14 @@
 import * as cdk from '@aws-cdk/core';
 import dynamodb = require('@aws-cdk/aws-dynamodb');
-import { Function, Runtime, AssetCode } from '@aws-cdk/aws-lambda';
+import { Function, Runtime, AssetCode, StartingPosition, QualifiedFunctionBase } from '@aws-cdk/aws-lambda';
 import { LambdaRestApi, CfnAuthorizer, LambdaIntegration, AuthorizationType, IResource, MockIntegration, PassthroughBehavior, Cors } from '@aws-cdk/aws-apigateway';
 import CatagloryCognitoResources from './cognito_resources';
 import { Bucket } from '@aws-cdk/aws-s3';
 import { CloudFrontWebDistribution } from '@aws-cdk/aws-cloudfront';
-import { type } from 'os';
+import round_scorer_resources from './round_scorer_resources';
+import { StreamViewType } from '@aws-cdk/aws-dynamodb';
 
 export class CataGloryCdkStack extends cdk.Stack {
-
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
@@ -54,6 +54,7 @@ export class CataGloryCdkStack extends cdk.Stack {
       },
       tableName: 'TheOneToRuleThemAll',
       removalPolicy: cdk.RemovalPolicy.RETAIN,
+      stream: StreamViewType.NEW_AND_OLD_IMAGES
     });
 
     userGameTable.addGlobalSecondaryIndex({
@@ -78,6 +79,8 @@ export class CataGloryCdkStack extends cdk.Stack {
         SORT_KEY: userGameTableSortKey
       }
     });
+
+    round_scorer_resources(this, userGameTable);
 
     userGameTable.grantReadWriteData(backEndFunction);
 

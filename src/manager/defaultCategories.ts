@@ -1,5 +1,5 @@
-export const defaultCategories = {
-    1: [
+export const defaultCategories = [
+    [
         {
             QuestionNumber: 0,
             Category: 'country'
@@ -25,37 +25,33 @@ export const defaultCategories = {
             Category: 'job'
         }
     ],
-    2: [
+    [
         {
             QuestionNumber: 0,
-            Category: 'basketball team'
-        },
-        {
-            QuestionNumber: 1,
             Category: 'hockey team'
         },
         {
-            QuestionNumber: 2,
-            Category: 'baseball mascot'
+            QuestionNumber: 1,
+            Category: 'sports team mascot'
         },
         {
-            QuestionNumber: 3,
+            QuestionNumber: 2,
             Category: 'soccer league'
         },
         {
-            QuestionNumber: 4,
+            QuestionNumber: 3,
             Category: 'sports position'
         },
         {
-            QuestionNumber: 5,
+            QuestionNumber: 4,
             Category: 'famous athlete'
         },
         {
-            QuestionNumber: 6,
+            QuestionNumber: 5,
             Category: 'sport that uses a ball'
         }
     ],
-    3: [
+    [
         {
             QuestionNumber: 0,
             Category: 'famous actor'
@@ -67,6 +63,18 @@ export const defaultCategories = {
         {
             QuestionNumber: 2,
             Category: 'job on the set of a movie'
+        },
+        {
+            QuestionNumber: 3,
+            Category: 'movie based on a true story'
+        },
+        {
+            QuestionNumber: 4,
+            Category: 'classic movie'
+        }, 
+        {
+            QuestionNumber: 5,
+            Category: 'movie flop'
         }
     ]
-}
+]

@@ -1,5 +1,31 @@
-import * as dynamoDao from "./dynamoDao";
-import { QuestionPrefx, GameStates, GameItemDynamoDB, GamePrefix } from "./gameManager";
+import * as dynamoDao from "../dao/dynamoDao";
+import { GameStates, GameItemDynamoDB, GamePrefix } from "../manager/gameManager";
+import { defaultCategories } from "./defaultCategories";
+import * as randomLetterGenerator from './randomLetterGenerator';
+
+export interface Question {
+    QuestionNumber: number,
+    Category: string
+};
+  
+export interface QuestionDynamoDB extends dynamoDao.DynamoItem {
+    Letter: string,
+    Categories: Question[],
+    Round: number
+};
+
+export const QuestionPrefx = 'QUESTION';
+
+export const createQuestionRecord = (gameId: string, round: number, createdDateTime: string): QuestionDynamoDB => {
+    return {
+        PartitionKey: gameId,
+        SortKey: QuestionPrefx + '|' + round,
+        Letter: randomLetterGenerator.generate(),
+        Categories: defaultCategories[round - 1],
+        Round: round,
+        CreatedDateTime: createdDateTime
+    }
+};
 
 export interface GetQuestionsResponse {
     letter: string,

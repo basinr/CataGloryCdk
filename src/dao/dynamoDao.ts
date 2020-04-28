@@ -125,3 +125,39 @@ export async function updateItemWithKeyChange(oldItem: DynamoItem, newItem: Dyna
   
   return ddb.transactWrite(transactWriteParams).promise().then(() => {});
 }
+
+export async function updateItemsWithKeyChange(oldItems: DynamoItem[], newItems: DynamoItem[]): Promise<void> {
+  const ddb = new Aws.DynamoDB.DocumentClient();
+
+  console.log("old items: " + JSON.stringify(oldItems));
+  console.log("new items: " + JSON.stringify(newItems));
+
+  const deleteTransactItem = oldItems.map(item => {
+    return {
+      Delete: {
+        TableName: TABLE_NAME,
+        Key: {
+          PartitionKey: item.PartitionKey,
+          SortKey: item.SortKey
+        }
+      }
+    }
+  }) as DocumentClient.TransactWriteItem[];
+
+  const newTransactItem = newItems.map(item => {
+    return {
+      Put: {
+        TableName: TABLE_NAME,
+        Item: item
+      }
+    }
+  }) as DocumentClient.TransactWriteItem[];
+
+  const transactWriteParams = {
+    TransactItems: [...deleteTransactItem, ...newTransactItem]
+  } as DocumentClient.TransactWriteItemsInput;
+
+  console.log(JSON.stringify(transactWriteParams));
+  
+  return ddb.transactWrite(transactWriteParams).promise().then(() => {});
+}

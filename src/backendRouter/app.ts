@@ -8,9 +8,9 @@ import {
     getGame, 
     getGamesForUser, 
     endRound
-} from './gameManager';
+} from '../manager/gameManager';
 import compression from 'compression';
-import { getQuestions, putAnswer, getAnswers } from './answerManager';
+import { getQuestions, putAnswer, getAnswers } from '../manager/answerManager';
 
 const app = express();
 const router = express.Router();

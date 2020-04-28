@@ -1,4 +1,4 @@
-// https://cataglory.auth.us-west-2.amazoncognito.com/login?response_type=code&client_id=7ghhpt4ukpq44r0sgt5bm32i9u&redirect_uri=http://localhost
+// https://cataglory.auth.us-west-2.amazoncognito.com/login?response_type=code&client_id=258qmlhuh1a2h2h2a8d5qg82q6&redirect_uri=http://localhost:3000/
 
 import { UserPool, CfnIdentityPool, CfnUserPoolIdentityProvider, CfnUserPoolDomain, UserPoolClient, CfnUserPoolResourceServer, CfnUserPoolClient } from '@aws-cdk/aws-cognito';
 import { facebookSecret } from '../secrets.json';
@@ -29,7 +29,7 @@ export default class CatagloryCognitoResources {
             ],
             allowedOAuthFlowsUserPoolClient: true,
             allowedOAuthScopes: [
-                'openid', 'profile'
+                'openid'
             ],
             callbackUrLs: [ callbackUrl, "http://localhost:3000/" ],
             logoutUrLs: [ callbackUrl, "http://localhost:3000/" ],

@@ -1,8 +1,7 @@
-import * as dynamoDao from './dynamoDao'
+import * as dynamoDao from '../dao/dynamoDao'
 import * as idMinter from './idMinter';
-import * as randomLetterGenerator from './randomLetterGenerator';
-import { response, request } from 'express';
-import { defaultCategories } from './defaultCategories';
+import { createQuestionRecord } from './answerManager';
+import { GameScore } from '../roundScoring/roundScorerManager';
 
 export interface CreateNewGameRequest {
     userId: string,
@@ -37,12 +36,12 @@ export interface Player {
 export interface PlayerGameData {
   userId: string,
   nickname: string
-  score: number
 }
 
 export interface GetGameResponse {
   gameId: string,
   host: Player,
+  round: number,
   players: PlayerGameData[]
 }
 
@@ -54,34 +53,25 @@ export interface GetGamesByStateRequest {
 export interface GameItemDynamoDB extends dynamoDao.DynamoItem {
   Nickname: string,
   Host: boolean,
-  Score: number
   GameId: string,
   UserId: string, 
   Round: number,
   State: GameStates
-}
-
-export interface Question {
-  QuestionNumber: number,
-  Category: string
-}
-
-export interface QuestionDynamoDB extends dynamoDao.DynamoItem {
-  Letter: string,
-  Categories: Question[],
-  Round: number
-}
+  Scores: GameScore,
+};
 
 export interface GetGamesForUserResponse {
   games: BasicGameInfo[]
-}
+};
 
 export interface BasicGameInfo {
   userId: string,
-  gameId: string
-}
+  gameId: string,
+  state: GameStates,
+  round: number,
+  scores: GameScore
+};
 
-export const QuestionPrefx = 'QUESTION';
 export const GamePrefix = 'GAME';
 export const AnswerPrefix = 'ANSWER';
 export enum GameStates {
@@ -89,14 +79,14 @@ export enum GameStates {
   Pending = "PENDING",
   Waiting = "WAITING",
   Completed = "COMPLETED"
-}
+};
 
 export interface GetGamesForUserRequest {
   userId: string,
   state?: string
 }
 
-export function createNewGame(request: CreateNewGameRequest) : Promise<CreateNewGameResponse> {
+export async function createNewGame(request: CreateNewGameRequest) : Promise<CreateNewGameResponse> {
   console.log(JSON.stringify(request));
 
   const gameId = idMinter.mint(); 
@@ -113,18 +103,13 @@ export function createNewGame(request: CreateNewGameRequest) : Promise<CreateNew
       UserId: request.userId,
       GameId: gameId,
       Host: true,
-      Score: 0,
       CreatedDateTime: dateString,
-      State: GameStates.Pending
+      State: GameStates.Pending,
+      Scores: {
+        scores: []
+      }
     } as GameItemDynamoDB,
-    {
-      PartitionKey: gameId,
-      SortKey: QuestionPrefx + '|' + 1,
-      Letter: randomLetterGenerator.generate(),
-      Categories: defaultCategories[1],
-      Round: 1,
-      CreatedDateTime: dateString
-    } as QuestionDynamoDB
+    createQuestionRecord(gameId, 1, dateString)
   ).then(() => {
     return {
       userId: request.userId,
@@ -148,9 +133,11 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
     UserId: request.userId,
     GameId: request.gameId,
     Host: false,
-    Score: 0,
     CreatedDateTime: dateString,
-    State: GameStates.Pending
+    State: GameStates.Pending,
+    Scores: {
+      scores: []
+    }
   };
 
   return dynamoDao.put(item).then(() => {
@@ -170,12 +157,17 @@ export async function getGamesForUser(userId: string, state = "") : Promise <Get
   return dynamoDao.getItemsByIndexAndSortKey({
     indexName: dynamoDao.PRIMARY_KEY, 
     indexValue: userId
-  }, sortKeyQuery).then(items => {
+  }, sortKeyQuery)
+  .then(items => items as GameItemDynamoDB[])
+  .then(items => {
       return {
         games: items.map(item => {
           return {
             userId: item.UserId,
-            gameId: item.GameId
+            gameId: item.GameId,
+            round: item.Round,
+            scores: item.Scores,
+            state: item.State
           }
         })
       }}
@@ -189,18 +181,19 @@ export async function getGame(request: GetGameRequest) : Promise <GetGameRespons
   },{
     sortKeyName: dynamoDao.GSI_SORT_KEY,
     sortKeyPrefix: GamePrefix
-  }).then(items => {
-      console.log("Response : " + JSON.stringify(response));
+  })
+  .then(items => items as GameItemDynamoDB[])
+  .then(items => {
       return {
         host: {
           userId: items.filter(item => item.Host)[0].PartitionKey,
           nickname: items.filter(item => item.Host)[0].Nickname
         },
         gameId: request.gameId,
+        round: items[0].Round,
         players: items.map(item => {
           return {
             userId: item.UserId,
-            score: item.Score,
             nickname: item.Nickname
           }
         })
@@ -238,4 +231,27 @@ export async function endRound(request: EndRoundRequest): Promise<void> {
     }, 
     gameRow
   );
+}
+
+export async function startNewRound(...gameItems: GameItemDynamoDB[]) {
+  const dateString = new Date(Date.now()).toISOString();
+
+  const gameId = gameItems[0].GameId;
+  const round = gameItems[0].Round + 1;
+    
+  await dynamoDao.put(createQuestionRecord(gameId, round, dateString));
+  
+  const newRoundItems = gameItems.map(item => {
+      return {
+          ...item,
+          SortKey: GamePrefix + '|' + GameStates.Pending + '|' + gameId,
+          Round: round,
+          State: GameStates.Pending,
+          CreatedDateTime: dateString
+      }
+  }) as GameItemDynamoDB[];
+
+  console.log("All users in game: " + JSON.stringify(gameItems));
+
+  return dynamoDao.updateItemsWithKeyChange(gameItems, newRoundItems).then();
 }
