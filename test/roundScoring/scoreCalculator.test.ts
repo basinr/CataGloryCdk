@@ -376,7 +376,8 @@ describe('score', () => {
             SortKey: AnswerPrefix + '|' + userId,
             GameId: gameId,
             Answer: answer,
-            Round: round
+            Round: round,
+            Nickname: nickName1
         };
     };
 });

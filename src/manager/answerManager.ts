@@ -71,7 +71,8 @@ export interface AnswerDynamoItem extends dynamoDao.DynamoItem {
     GameId: string,
     Round: number,
     QuestionNumber: number,
-    Answer: string
+    Answer: string,
+    Nickname: string
 }
 
 export const AnswerPrefix = 'ANSWER';
@@ -105,7 +106,8 @@ export async function putAnswer(request: PutAnswerRequest): Promise<void> {
         GameId: request.gameId,
         Round: request.round,
         QuestionNumber: request.questionNumber,
-        Answer: request.answer
+        Answer: request.answer,
+        Nickname: gameItems[0].Nickname
     } as AnswerDynamoItem).then();
 }
 
@@ -121,7 +123,8 @@ export interface GetAnswersResponse {
 export interface UserAnswer {
     questionNumber: number,
     userId: string,
-    answer: string
+    answer: string,
+    nickname: string
 }
 
 export async function getAnswers(request: GetAnswersRequest): Promise<GetAnswersResponse> {
@@ -150,7 +153,8 @@ export async function getAnswers(request: GetAnswersRequest): Promise<GetAnswers
                 answerResponse.answers.push({
                     questionNumber: row.QuestionNumber,
                     answer: row.Answer,
-                    userId: row.UserId
+                    userId: row.UserId,
+                    nickname: row.Nickname
                 });
             });
             return answerResponse;

@@ -44,7 +44,7 @@ export default class CatagloryCognitoResources {
         new CfnUserPoolDomain(scope, "userPoolDomain", {
             userPoolId: userPool.userPoolId,
             // cataglory-dev: Ronnie
-            domain: "cataglory-dev"
+            domain: "cataglory"
         });
 
         return userPool;          

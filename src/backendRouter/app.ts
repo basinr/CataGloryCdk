@@ -23,48 +23,48 @@ router.use(awsServerlessExpressMiddleware.eventContext());
 
 router.get('/GAMES/:userId', async (req,  res) => {
     const response = await getGamesForUser(req.params.userId)
-    res.send(JSON.stringify(response));
+    res.json(response);
 });
 
 router.get('/GAMES/:userId/:state', async (req,  res) => {
     console.log("userId : " + req.params.userId);
     console.log("state : " + req.params.state);
     const response = await getGamesForUser(req.params.userId, req.params.state);
-    res.send(JSON.stringify(response));
+    res.json(response);
 });
 
 router.get('/GAME/:gameId', async (req,  res) => {
     const getGameResponse = await getGame({
         gameId: req.params.gameId
     });
-    res.send(JSON.stringify(getGameResponse));
+    res.json(getGameResponse);
 });
 
 router.post('/GAME', async (req, res) => {
     const createNewGameResponse = await createNewGame(req.body);
-    res.send(JSON.stringify(createNewGameResponse));
+    res.json(createNewGameResponse);
 });
 
 router.put('/GAME', async (req, res) => {
-    res.send(JSON.stringify(await joinGame(req.body)));
+    res.json(await joinGame(req.body));
 });
 
 router.get('/QUESTIONS/:gameId/:round', async (req, res) => {
     const response = await getQuestions(req.params.gameId, req.params.round as unknown as number);
 
-    res.send(JSON.stringify(response));
+    res.json(response);
 });
 
 router.put('/ANSWER', async(req, res) => {
     await putAnswer(req.body);
 
-    res.send('Success');
+    res.json({});
 });
 
 router.get('/ANSWERS/:gameId/:round', async (req, res) => {
     const response = await getAnswers({gameId: req.params.gameId, round: req.params.round as unknown as number});
 
-    res.send(JSON.stringify(response));
+    res.json(response);
 });
 
 router.post('/ROUND/:userId/:gameId', async(req, res) => {
@@ -73,7 +73,7 @@ router.post('/ROUND/:userId/:gameId', async(req, res) => {
         gameId: req.params.gameId
     });
 
-    res.send('Success');
+    res.json({});
 });
 
 app.use('/', router);

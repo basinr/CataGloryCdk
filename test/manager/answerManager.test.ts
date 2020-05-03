@@ -69,6 +69,7 @@ describe('answerManager', () => {
         const sampleUserId = 'userId';
         const sampleGameId = 'game123';
         const sampleRound = 1;
+        const sampleNickname = 'Willy';
         const sampleAnswer = 'abc';
         const sampleQuestionNumber = 3;
         const dateTimeEpoch = 795329084000;
@@ -91,7 +92,7 @@ describe('answerManager', () => {
 
         describe('gameItem does not exist', () => {
             beforeEach(() => {
-                getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) => Promise.resolve([]));
+                getByKeySpy.mockImplementation((index, sort?) => Promise.resolve([]));
             });
 
             it('rejects this with an error', async () => {
@@ -119,10 +120,11 @@ describe('answerManager', () => {
 
         describe('gameItem exists', () => {
             beforeEach(async () => {
-                getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) => Promise.resolve([{
+                getByKeySpy.mockImplementation((index, sort?) => Promise.resolve([{
                     PartitionKey: sampleUserId,
                     SortKey: sampleGameId,
-                    Round: sampleRound
+                    Round: sampleRound,
+                    Nickname: sampleNickname
                 }]));
 
                 await putAnswer({
@@ -160,7 +162,8 @@ describe('answerManager', () => {
                         GameId: sampleGameId,
                         Round: sampleRound,
                         QuestionNumber: sampleQuestionNumber,
-                        Answer: sampleAnswer
+                        Answer: sampleAnswer,
+                        Nickname: sampleNickname
                     });
             });
 
@@ -197,6 +200,9 @@ describe('answerManager', () => {
         const sampleQuestionNumber2 = 2;
         const sampleAnswer = "answer1";
         const sampleAnswer2 = "answer2";
+        
+        const sampleNickName1 = "willy";
+        const sampleNickName2 = "ronnie";
 
         const getByKeySpy = jest.spyOn(dynamoDao, 'getItemsByIndexAndSortKey');
 
@@ -211,11 +217,15 @@ describe('answerManager', () => {
                         {
                             QuestionNumber: sampleQuestionNumber,
                             Answer: sampleAnswer,
-                            UserId : sampleUserId } as {[key: string]: any; },
+                            UserId : sampleUserId,
+                            Nickname: sampleNickName1
+                        } as {[key: string]: any; },
                         {
                             QuestionNumber: sampleQuestionNumber2,
                             Answer: sampleAnswer2,
-                            UserId : sampleUserId2 } as {[key: string]: any; },
+                            UserId : sampleUserId2,
+                            Nickname: sampleNickName2
+                        } as {[key: string]: any; },
                     ])
                 );
             });
@@ -240,12 +250,14 @@ describe('answerManager', () => {
                     {
                         questionNumber: sampleQuestionNumber,
                         answer: sampleAnswer,
-                        userId: sampleUserId
+                        userId: sampleUserId,
+                        nickname: sampleNickName1
                     },
                     {
                         questionNumber: sampleQuestionNumber2,
                         answer: sampleAnswer2,
-                        userId: sampleUserId2
+                        userId: sampleUserId2,
+                        nickname: sampleNickName2
                     }
                 ]});
             });
