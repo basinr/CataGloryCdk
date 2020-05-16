@@ -1,7 +1,8 @@
 import * as dynamoDao from '../../src/dao/dynamoDao';
-import { GameStates, GamePrefix } from '../../src/manager/gameManager';
+import * as gameManager from '../../src/manager/gameManager';
+import { GameStates, createGameItemGSISortKey } from '../../src/manager/gameManager';
 import { defaultCategories } from '../../src/manager/defaultCategories';
-import { putAnswer, AnswerPrefix, getQuestions, QuestionPrefx, getAnswers } from '../../src/manager/answerManager';
+import { putAnswer, AnswerPrefix, getQuestions, QuestionPrefx, getAnswers, reportAnswer, createAnswerDynamoSortKey } from '../../src/manager/answerManager';
 
 describe('answerManager', () => {
     describe('getQuestions', () => {
@@ -108,12 +109,12 @@ describe('answerManager', () => {
                 expect(getByKeySpy).toHaveBeenCalledTimes(1);
                 expect(getByKeySpy).toHaveBeenCalledWith(
                     {
-                        indexName: dynamoDao.PRIMARY_KEY,
+                        indexName: dynamoDao.GSI_KEY,
                         indexValue: sampleUserId
                     },
                     {
-                        sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
-                        sortKeyPrefix: GamePrefix + '|' + GameStates.Pending + '|' + sampleGameId    
+                        sortKeyName: dynamoDao.GSI_SORT_KEY,
+                        sortKeyPrefix: createGameItemGSISortKey(GameStates.Pending, sampleGameId)   
                     });
             });
         });
@@ -140,12 +141,12 @@ describe('answerManager', () => {
                 expect(getByKeySpy).toHaveBeenCalledTimes(1);
                 expect(getByKeySpy).toHaveBeenCalledWith(
                     {
-                        indexName: dynamoDao.PRIMARY_KEY,
+                        indexName: dynamoDao.GSI_KEY,
                         indexValue: sampleUserId
                     },
                     {
-                        sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
-                        sortKeyPrefix: GamePrefix + '|' + GameStates.Pending + '|' + sampleGameId    
+                        sortKeyName: dynamoDao.GSI_SORT_KEY,
+                        sortKeyPrefix: createGameItemGSISortKey(GameStates.Pending, sampleGameId)
                     });
             });
         
@@ -163,7 +164,8 @@ describe('answerManager', () => {
                         Round: sampleRound,
                         QuestionNumber: sampleQuestionNumber,
                         Answer: sampleAnswer,
-                        Nickname: sampleNickname
+                        Nickname: sampleNickname,
+                        Strikes: []
                     });
             });
 
@@ -204,6 +206,9 @@ describe('answerManager', () => {
         const sampleNickName1 = "willy";
         const sampleNickName2 = "ronnie";
 
+        const strikes1 = 1;
+        const strikes2 = 2;
+
         const getByKeySpy = jest.spyOn(dynamoDao, 'getItemsByIndexAndSortKey');
 
         afterEach(() => {
@@ -218,13 +223,15 @@ describe('answerManager', () => {
                             QuestionNumber: sampleQuestionNumber,
                             Answer: sampleAnswer,
                             UserId : sampleUserId,
-                            Nickname: sampleNickName1
+                            Nickname: sampleNickName1,
+                            Strikes: strikes1
                         } as {[key: string]: any; },
                         {
                             QuestionNumber: sampleQuestionNumber2,
                             Answer: sampleAnswer2,
                             UserId : sampleUserId2,
-                            Nickname: sampleNickName2
+                            Nickname: sampleNickName2,
+                            Strikes: strikes2
                         } as {[key: string]: any; },
                     ])
                 );
@@ -251,13 +258,15 @@ describe('answerManager', () => {
                         questionNumber: sampleQuestionNumber,
                         answer: sampleAnswer,
                         userId: sampleUserId,
-                        nickname: sampleNickName1
+                        nickname: sampleNickName1,
+                        strikes: strikes1
                     },
                     {
                         questionNumber: sampleQuestionNumber2,
                         answer: sampleAnswer2,
                         userId: sampleUserId2,
-                        nickname: sampleNickName2
+                        nickname: sampleNickName2,
+                        strikes: strikes2
                     }
                 ]});
             });
@@ -273,6 +282,135 @@ describe('answerManager', () => {
             it('throws an exception', async () => {
                 await expect(getAnswers({gameId: sampleGameId, round: sampleRound})).rejects.toBeInstanceOf(Error);
             })
+        });
+    });
+
+    describe('reportAnswer', () => {
+        const gameId = '123';
+        const round = 1;
+        const hostId = 'host123';
+        const nicknameHost = 'I am host';
+        const violaterId = 'violater123';
+        const violaterNickname = 'I am violater';
+        const userId = 'userId123';
+        const userNickname = 'I am user';
+        const questionNumber = 4;
+
+        const getGamesSpy = jest.spyOn(gameManager, 'getGame');
+        const appendToValueSpy = jest.spyOn(dynamoDao, 'appendToValue');
+
+        beforeEach(() => {
+            appendToValueSpy.mockImplementation((pk, sk, attr, app) => Promise.resolve());
+        });
+
+        afterEach(() => {
+            getGamesSpy.mockClear();
+            appendToValueSpy.mockClear();
+        });
+
+        describe('user is not in game', () => {
+            const getGameResponse: gameManager.GetGameResponse = {
+                gameId: gameId,
+                round: round,
+                host: {
+                    userId: hostId,
+                    nickname: nicknameHost
+                },
+                players: [{
+                    userId: violaterId,
+                    nickname: violaterId,
+                    state: gameManager.GameStates.Pending
+                }]
+            };
+
+            beforeEach(() => {
+                getGamesSpy.mockImplementation(game => Promise.resolve(getGameResponse));
+            });
+
+            it('throws an error and does not call appendToValue', async () => {
+                await expect(reportAnswer(
+                    userId,
+                    violaterId,
+                    gameId,
+                    round,
+                    questionNumber
+                )).rejects.toBeInstanceOf(Error);
+
+                expect(appendToValueSpy).toHaveBeenCalledTimes(0);
+            });
+        });
+
+        describe('violater is not in game', () => {
+            const getGameResponse: gameManager.GetGameResponse = {
+                gameId: gameId,
+                round: round,
+                host: {
+                    userId: hostId,
+                    nickname: nicknameHost
+                },
+                players: [{
+                    userId: userId,
+                    nickname: userNickname,
+                    state: gameManager.GameStates.Pending
+                }]
+            };
+
+            beforeEach(() => {
+                getGamesSpy.mockImplementation(game => Promise.resolve(getGameResponse));
+            });
+
+            it('throws an error and does not call appendToValue', async () => {
+                await expect(reportAnswer(
+                    userId,
+                    violaterId,
+                    gameId,
+                    round,
+                    questionNumber
+                )).rejects.toBeInstanceOf(Error);
+
+                expect(appendToValueSpy).toHaveBeenCalledTimes(0);
+            });
+        });
+
+        describe('violator and user are in the game', () => {
+            const getGameResponse: gameManager.GetGameResponse = {
+                gameId: gameId,
+                round: round,
+                host: {
+                    userId: hostId,
+                    nickname: nicknameHost
+                },
+                players: [{
+                    userId: userId,
+                    nickname: userNickname,
+                    state: gameManager.GameStates.Pending
+                },{
+                    userId: violaterId,
+                    nickname: violaterNickname,
+                    state: gameManager.GameStates.Pending
+                }]
+            };
+
+            beforeEach(() => {
+                getGamesSpy.mockImplementation(game => Promise.resolve(getGameResponse));
+            });
+
+            it('calls appendToValue with the correct params', async () => {
+                await reportAnswer(
+                    userId,
+                    violaterId,
+                    gameId,
+                    round,
+                    questionNumber);
+                
+                expect(appendToValueSpy).toHaveBeenCalledTimes(1);
+                expect(appendToValueSpy).toHaveBeenCalledWith(
+                    violaterId,
+                    createAnswerDynamoSortKey(gameId, round, questionNumber),
+                    'Strikes',
+                    [userId]
+                );
+            });
         });
     });
 });

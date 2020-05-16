@@ -1,9 +1,7 @@
-import { DynamoItem, put, getItemsByIndexAndSortKey, IndexQuery, SortKeyQuery, transactPut, GSI_KEY, GSI_SORT_KEY, PRIMARY_SORT_KEY, updateItemWithKeyChange, updateItemsWithKeyChange} from "../../src/dao/dynamoDao";
+import { DynamoItem, put, getItemsByIndexAndSortKey, IndexQuery, SortKeyQuery, transactPut, GSI_KEY, GSI_SORT_KEY, PRIMARY_SORT_KEY, updateItemWithKeyChange, updateItemsWithKeyChange, appendToValue, bulkUpdateForParitionKey} from "../../src/dao/dynamoDao";
 import * as AWSMock from "aws-sdk-mock";
 import * as Aws from 'aws-sdk';
 import { DocumentClient, QueryInput } from "aws-sdk/clients/dynamodb";
-import { fake } from "sinon";
-import { networkInterfaces } from "os";
 
 
 describe('dynamoDao', () => {
@@ -383,5 +381,113 @@ describe('dynamoDao', () => {
       expect(timesCalled).toBe(1);
     });
   });
+  
+  describe('bulkUpdateForPartitionKey', () => {
+    const samplePk = 'pk';
+    const sortKey1 = 'sk1';
+    const sortKey2 = 'sk2';
+    const sortKey3 = 'sk3';
+    const sortKeys = [sortKey1 , sortKey2, sortKey3];
+    const value1 = 'value1';
+    const value2 = 'value2';
+    const attributeValues = [
+      {
+        name: 'attr1',
+        value: value1
+      },
+      {
+        name: 'attr2',
+        value: value2
+      }
+    ];
 
+    const expectedTransactParams = {
+      TransactItems: [
+        {Update: {
+          TableName: TABLE_NAME,
+          Key: {
+            PartitionKey: samplePk,
+            SortKey: sortKey1
+          },
+          UpdateExpression: 'SET attr1 = :v0, attr2 = :v1',
+          ExpressionAttributeValues: {
+            ':v0': value1,
+            ':v1': value2
+          }
+        }},
+        {Update: {
+          TableName: TABLE_NAME,
+          Key: {
+            PartitionKey: samplePk,
+            SortKey: sortKey2
+          },
+          UpdateExpression: 'SET attr1 = :v0, attr2 = :v1',
+          ExpressionAttributeValues: {
+            ':v0': value1,
+            ':v1': value2
+          }
+        }},
+        {Update: {
+          TableName: TABLE_NAME,
+          Key: {
+            PartitionKey: samplePk,
+            SortKey: sortKey3
+          },
+          UpdateExpression: 'SET attr1 = :v0, attr2 = :v1',
+          ExpressionAttributeValues: {
+            ':v0': value1,
+            ':v1': value2
+          }
+        }}
+      ]
+    }
+
+    it('updates dynamo with the correct params', async () => {
+        let timesCalled = 0;
+        AWSMock.mock('DynamoDB.DocumentClient', 'transactWrite', (params: Aws.DynamoDB.DocumentClient.PutItemInput, callback: Function) => {
+          expect(params).toMatchObject(expectedTransactParams);
+
+          timesCalled++;
+          
+          callback(null, null)
+        });
+
+        await bulkUpdateForParitionKey(samplePk, sortKeys, attributeValues);
+
+        expect(timesCalled).toBe(1);
+    });
+  });
+  
+
+  describe('appendToValue', () => {
+    const pk = 'pk';
+    const sk = 'sk';
+    const attribute = 'list';
+    const append = ['blah'];
+
+    const updateItem: Aws.DynamoDB.DocumentClient.UpdateItemInput = {
+      TableName: TABLE_NAME,
+      Key: {
+        PartitionKey: pk,
+        SortKey: sk
+      },
+      UpdateExpression: 'set #a = list_append(:vals, #a)',
+      ExpressionAttributeNames: {'#a': attribute},
+      ExpressionAttributeValues: {':vals': append}
+    }
+
+    it('calls update with the correct params', async () => {
+      let timesCalled = 0;
+      AWSMock.mock('DynamoDB.DocumentClient', 'update', (params: Aws.DynamoDB.DocumentClient.UpdateItemInput, callback: Function) => {
+        expect(params).toStrictEqual(updateItem);
+
+        timesCalled++;
+
+        callback(null, null)
+      });
+
+      await appendToValue(pk, sk, attribute, append);
+      expect(timesCalled).toBe(1);
+    })
+  });
 });

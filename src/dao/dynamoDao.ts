@@ -161,3 +161,64 @@ export async function updateItemsWithKeyChange(oldItems: DynamoItem[], newItems:
   
   return ddb.transactWrite(transactWriteParams).promise().then(() => {});
 }
+
+export interface AttributeNameValue {
+  name: string,
+  value: any
+}
+
+export async function bulkUpdateForParitionKey(partitionKey: string, sortKeys: string[], attributes: AttributeNameValue[]): Promise<void> {
+  const ddb = new Aws.DynamoDB.DocumentClient();
+  
+  const expressionAttributeValues: DocumentClient.ExpressionAttributeValueMap = {};
+  let updateExpression = '';
+
+  attributes.forEach((attribute, index) => {
+    if (index === 0) {
+      updateExpression = 'SET ' + attribute.name + ' = :v' + index;
+    } else {
+      updateExpression += ', ' + attribute.name + ' = :v' + index;
+    }
+    expressionAttributeValues[':v' + index] = attribute.value
+  });
+
+  
+  const updateTransact = sortKeys.map(sortKey => {
+    return {
+      Update: {
+        TableName: TABLE_NAME,
+        Key: {
+          PartitionKey: partitionKey,
+          SortKey: sortKey
+        },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeValues: expressionAttributeValues
+      }
+    } as DocumentClient.TransactWriteItem
+  });
+
+  const transactWriteParams = {
+    TransactItems: [...updateTransact]
+  } as DocumentClient.TransactWriteItemsInput;
+
+  console.log('TransactRequest ' + JSON.stringify(updateTransact));
+
+  return ddb.transactWrite(transactWriteParams).promise().then(() => {});
+}
+
+export async function appendToValue(partitionKey: string, sortKey: string, attribute: string, appendValue: string[]): Promise<void> {
+  const ddb = new Aws.DynamoDB.DocumentClient();
+
+  const updateParams: DocumentClient.UpdateItemInput = {
+    TableName: TABLE_NAME,
+    Key: {
+      PartitionKey: partitionKey,
+      SortKey: sortKey
+    },
+    UpdateExpression: 'set #a = list_append(:vals, #a)',
+    ExpressionAttributeNames: {'#a': attribute},
+    ExpressionAttributeValues: {':vals': appendValue}
+  }
+
+  return ddb.update(updateParams).promise().then();
+}

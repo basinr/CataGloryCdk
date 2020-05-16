@@ -1,6 +1,6 @@
 import * as dynamoDao from '../../src/dao/dynamoDao';
 import * as answerManager from "../../src/manager/answerManager";
-import { GameStates, GamePrefix, GameItemDynamoDB } from "../../src/manager/gameManager";
+import { GameStates, GameItemDynamoDB } from "../../src/manager/gameManager";
 import { AnswerPrefix } from "../../src/manager/answerManager";
 import { GameScore } from "../../src/roundScoring/roundScorerManager";
 import { calculate } from '../../src/roundScoring/scoreCalculator';
@@ -31,6 +31,36 @@ describe('score', () => {
             }
         ]
     };
+
+    const blankScores = {
+        scores: [
+            {
+                userId: userId1,
+                score: 0,
+                nickname: nickName1
+            },
+            {
+                userId: userId2,
+                score: 0,
+                nickname: nickName2
+            }
+        ]
+    };
+
+    const lastRoundScores = {
+        scores: [
+            {
+                userId: userId1,
+                score: 0,
+                nickname: nickName1
+            },
+            {
+                userId: userId2,
+                score: 1,
+                nickname: nickName2
+            }
+        ]
+    }
 
     const getByKeySpy = jest.spyOn(dynamoDao, 'getItemsByIndexAndSortKey');
     const getQuestionsSpy = jest.spyOn(answerManager, 'getQuestions');
@@ -185,7 +215,7 @@ describe('score', () => {
         const answer2 = "Cougar";
 
         beforeEach(() => {
-            getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) => {
+            getByKeySpy.mockImplementation((index, sort?) => {
                   return Promise.resolve([
                     createAnswerDynamoItem(userId1, answer1),
                     createAnswerDynamoItem(userId2, answer2)
@@ -218,7 +248,7 @@ describe('score', () => {
         const wrongAnswer2 = 'lizard';
 
         beforeEach(() => {
-            getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) => {
+            getByKeySpy.mockImplementation((index, sort?) => {
                   return Promise.resolve([
                     createAnswerDynamoItem(userId1, wrongAnswer1),
                     createAnswerDynamoItem(userId2, wrongAnswer2),
@@ -247,10 +277,48 @@ describe('score', () => {
         });
     });
 
+    describe('answers have strikes', () => {
+        const goodAnswer = 'cat';
+        const badAnswer = 'casdfasdfas';
+
+        beforeEach(() => {
+            getByKeySpy.mockImplementation((index, sort?) => {
+                  return Promise.resolve([
+                    createAnswerDynamoItem(userId1, goodAnswer, 0, ['wyufeng']),
+                    createAnswerDynamoItem(userId2, badAnswer, 0, ['wyufeng', 'bulovaw']),
+                  ]);
+            });
+        });
+
+        it('answers that have more than 1 strikes will not be counted', async () => {
+            const userGames = [ 
+                createWaitingDynamoItem(userId1, nickName1, blankScores),
+                createWaitingDynamoItem(userId2, nickName2, blankScores)
+            ];
+
+            const calculatedScores = await calculate(gameId, round, userGames);
+
+            expect(calculatedScores).toStrictEqual({
+                scores: [
+                    {
+                        userId: userId1,
+                        score: 0,
+                        nickname: nickName1
+                    },
+                    {
+                        userId: userId2,
+                        score: 0,
+                        nickname: nickName2
+                    }
+                ]
+            });
+        });
+    });
+
     describe('user did not input an answer', () => {
 
         beforeEach(() => {
-            getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) => {
+            getByKeySpy.mockImplementation((index, sort?) => {
                   return Promise.resolve([]);
             });
         });
@@ -308,7 +376,7 @@ describe('score', () => {
         };
 
         beforeEach(() => {
-            getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) => {
+            getByKeySpy.mockImplementation((index, sort?) => {
                   return Promise.resolve([
                       createAnswerDynamoItem(userId1, 'cat', 0),
                       createAnswerDynamoItem(userId2, 'cat', 0),
@@ -352,23 +420,62 @@ describe('score', () => {
             expect(calculatedScores).toStrictEqual(expectedScores);
 
         });
-    })
+    });
 
-    const createWaitingDynamoItem = (userId: string, nickName: string, initialScores: GameScore): GameItemDynamoDB => {
+    describe('re-score for round', () => {
+        const answer1 = "Cat";
+        const answer2 = "Cougar";
+
+        beforeEach(() => {
+            getByKeySpy.mockImplementation((index: dynamoDao.IndexQuery, sort?: dynamoDao.SortKeyQuery) => {
+                  return Promise.resolve([
+                    createAnswerDynamoItem(userId1, answer1),
+                    createAnswerDynamoItem(userId2, answer2)
+                ]);
+            });
+        });
+
+        it('will score the game and add to the last rounds scores', async () => {
+            const userGames = [ 
+                createWaitingDynamoItem(userId1, nickName1, initialScores, 2),
+                createWaitingDynamoItem(userId2, nickName2, initialScores, 2)
+            ];
+
+            const calculatedScores = await calculate(gameId, round, userGames);
+        
+            expect(calculatedScores).toStrictEqual({
+                scores: [
+                    {
+                        userId: userId1,
+                        nickname: nickName1,
+                        score: 1
+                    },
+                    {
+                        userId: userId2,
+                        nickname: nickName2,
+                        score: 2
+                    }
+                ]
+            });
+        });
+    });
+
+    const createWaitingDynamoItem = (userId: string, nickName: string, initialScores: GameScore, newRound: number = round): GameItemDynamoDB => {
         return {
             PartitionKey: userId,
-            SortKey: GamePrefix + '|' + GameStates.Waiting + '|' + gameId,
+            SortKey: 'GamePrefix' + '|' + GameStates.Waiting + '|' + gameId,
             UserId: userId,
             GameId: gameId,
-            Round: round,
+            Round: newRound,
             Host: true,
             Nickname: nickName,
-            State: GameStates.Waiting,
-            Scores: initialScores
+            GameState: GameStates.Waiting,
+            Scores: initialScores,
+            LastRoundScores: lastRoundScores
         };
     };
 
-    const createAnswerDynamoItem = (userId: string, answer: string, questionNumber: number = 0): answerManager.AnswerDynamoItem => {
+    const createAnswerDynamoItem = (userId: string, answer: string, questionNumber: number = 0, strikes: string[] = []): answerManager.AnswerDynamoItem => {
         return {
             UserId: userId,
             QuestionNumber: questionNumber,
@@ -377,7 +484,8 @@ describe('score', () => {
             GameId: gameId,
             Answer: answer,
             Round: round,
-            Nickname: nickName1
+            Nickname: nickName1,
+            Strikes: strikes
         };
     };
 });

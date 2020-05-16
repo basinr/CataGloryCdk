@@ -1,5 +1,6 @@
 import * as dynamoDao from "../dao/dynamoDao";
-import { GameStates, GameItemDynamoDB, GamePrefix } from "../manager/gameManager";
+import * as gameManager from "./gameManager";
+import { GameStates, GameItemDynamoDB } from "../manager/gameManager";
 import { defaultCategories } from "./defaultCategories";
 import * as randomLetterGenerator from './randomLetterGenerator';
 
@@ -72,23 +73,26 @@ export interface AnswerDynamoItem extends dynamoDao.DynamoItem {
     Round: number,
     QuestionNumber: number,
     Answer: string,
-    Nickname: string
-}
+    Nickname: string,
+    Strikes: string[]
+};
 
 export const AnswerPrefix = 'ANSWER';
+
+export function createAnswerDynamoSortKey(gameId: string, round: number, questionNumber: number) {
+    return AnswerPrefix + '|' + gameId + '|' + round + '|' + questionNumber;
+}
 
 export async function putAnswer(request: PutAnswerRequest): Promise<void> {
     const gameItems = await dynamoDao.getItemsByIndexAndSortKey(
     {
-        indexName: dynamoDao.PRIMARY_KEY,
+        indexName: dynamoDao.GSI_KEY,
         indexValue: request.userId
     },
     {
-        sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
-        sortKeyPrefix: GamePrefix + '|' + GameStates.Pending + '|' + request.gameId,
+        sortKeyName: dynamoDao.GSI_SORT_KEY,
+        sortKeyPrefix: gameManager.createGameItemGSISortKey(GameStates.Pending, request.gameId),
     }) as GameItemDynamoDB[];
-
-    console.log(JSON.stringify(gameItems));
 
     if (gameItems.length == 0 || gameItems[0].Round != request.round) {
         throw new Error('This user is not allowed to submit an answer for this question');
@@ -98,7 +102,7 @@ export async function putAnswer(request: PutAnswerRequest): Promise<void> {
 
     return dynamoDao.put({
         PartitionKey: request.userId,
-        SortKey: AnswerPrefix + '|' + request.gameId + '|' + request.round + '|' + request.questionNumber,
+        SortKey: createAnswerDynamoSortKey(request.gameId, request.round, request.questionNumber),
         Gsi: request.gameId,
         GsiSortKey: AnswerPrefix + '|' + request.round + '|' + request.userId + '|' + request.questionNumber,
         CreatedDateTime: dateString,
@@ -107,7 +111,8 @@ export async function putAnswer(request: PutAnswerRequest): Promise<void> {
         Round: request.round,
         QuestionNumber: request.questionNumber,
         Answer: request.answer,
-        Nickname: gameItems[0].Nickname
+        Nickname: gameItems[0].Nickname,
+        Strikes: []
     } as AnswerDynamoItem).then();
 }
 
@@ -117,14 +122,15 @@ export interface GetAnswersRequest {
 };
 
 export interface GetAnswersResponse {
-    answers: any
+    answers: UserAnswer[]
 }
 
 export interface UserAnswer {
     questionNumber: number,
     userId: string,
     answer: string,
-    nickname: string
+    nickname: string,
+    strikes: string[]
 }
 
 export async function getAnswers(request: GetAnswersRequest): Promise<GetAnswersResponse> {
@@ -146,7 +152,7 @@ export async function getAnswers(request: GetAnswersRequest): Promise<GetAnswers
                 throw new Error('400 no answers found');
             }
     
-            return items
+            return items as AnswerDynamoItem[]
         })
         .then(items => {
             items.forEach(row => {
@@ -154,9 +160,30 @@ export async function getAnswers(request: GetAnswersRequest): Promise<GetAnswers
                     questionNumber: row.QuestionNumber,
                     answer: row.Answer,
                     userId: row.UserId,
-                    nickname: row.Nickname
+                    nickname: row.Nickname,
+                    strikes: row.Strikes
                 });
             });
             return answerResponse;
         });
+}
+
+export async function reportAnswer(userId: string, violatedUserId: string, gameId: string, round: number, questionNumber: number) {
+    const gameItems = await gameManager.getGame({gameId: gameId});
+
+    if (gameItems.players.filter(player => player.userId === userId).length === 0) {
+        throw new Error('User is not in the game');
+    }
+
+    const violaterItems = gameItems.players.filter(player => player.userId === violatedUserId);
+
+    if (violaterItems.length === 0) {
+        throw new Error('Violater is not in the game');
+    }
+
+    console.log('GameItems : ' + JSON.stringify(gameItems));
+
+    const sortKey = createAnswerDynamoSortKey(gameId, round, questionNumber);
+
+    return dynamoDao.appendToValue(violatedUserId, sortKey, 'Strikes', [userId]);
 }

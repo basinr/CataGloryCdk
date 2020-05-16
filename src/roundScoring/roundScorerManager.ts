@@ -1,7 +1,6 @@
 import * as dynamoDao from "../dao/dynamoDao";
 import * as scoreCalculator from '../roundScoring/scoreCalculator';
 import * as gameManager from '../manager/gameManager';
-import { GamePrefix, GameItemDynamoDB, GameStates } from "../manager/gameManager";
 
 export interface Score {
     userId: string,
@@ -13,7 +12,8 @@ export interface GameScore {
     scores: Score[]
 }
 
-export const scoreRound = async (newItem: dynamoDao.DynamoItem) => {
+export const scoreRound = async (oldItem: dynamoDao.DynamoItem, newItem: dynamoDao.DynamoItem) => {
+    console.log("Old item: " + JSON.stringify(oldItem));
     console.log("New item: " + JSON.stringify(newItem));
 
     if (!isGameItem(newItem)) {
@@ -21,20 +21,21 @@ export const scoreRound = async (newItem: dynamoDao.DynamoItem) => {
         return;
     }
 
-    const newGameItem = newItem as GameItemDynamoDB;
+    const oldGameItem = oldItem as gameManager.GameItemDynamoDB;
+    const newGameItem = newItem as gameManager.GameItemDynamoDB;
 
-    if (!isRoundEndingEvent(newGameItem)) {
+    if (!isRoundEndingEvent(oldGameItem, newGameItem)) {
         console.log('Not a round ending event, ignoring for round scoring');
         return;
     }
 
     const userGames = await dynamoDao.getItemsByIndexAndSortKey({
-        indexName: dynamoDao.GSI_KEY,
+        indexName: dynamoDao.PRIMARY_KEY,
         indexValue: newGameItem.GameId
     }, {
-        sortKeyName: dynamoDao.GSI_SORT_KEY,
-        sortKeyPrefix: GamePrefix 
-    }) as GameItemDynamoDB[];
+        sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
+        sortKeyPrefix: gameManager.createGameItemSortKey() 
+    }) as gameManager.GameItemDynamoDB[];
 
     console.log("All users in game: " + JSON.stringify(userGames));
 
@@ -50,28 +51,30 @@ export const scoreRound = async (newItem: dynamoDao.DynamoItem) => {
 
     console.log("Calculated Gamescore " + JSON.stringify(gameScore));
 
-    gameManager.startNewRound(...userGames.map(item => {
-        return {
-            ...item,
-            Scores: gameScore
-        }
-    }));
+    gameManager.startNewRound(
+        newGameItem.GameId,
+        newGameItem.Round,
+        newGameItem.Scores,
+        gameScore,
+        ...userGames.map(userGame => userGame.UserId)
+    );
 };
 
 const isGameItem = (item: dynamoDao.DynamoItem): boolean => {
-    return item.SortKey.startsWith(GamePrefix);
+    return item.SortKey.startsWith(gameManager.createGameItemSortKey());
 };
 
-const isRoundEndingEvent = (newItem: GameItemDynamoDB) => {
-    return newItem.State === GameStates.Waiting;
+const isRoundEndingEvent = (oldItem: gameManager.GameItemDynamoDB, newItem: gameManager.GameItemDynamoDB) => {
+    return newItem.GameState === gameManager.GameStates.Waiting &&
+        oldItem.GameState === gameManager.GameStates.Pending;
 };
 
-const usersAllDone = (userGames: GameItemDynamoDB[]): boolean => {
-    const usersNotDone = userGames.filter((item: GameItemDynamoDB) =>
-        item.State === GameStates.Pending
+const usersAllDone = (userGames: gameManager.GameItemDynamoDB[]): boolean => {
+    const usersNotDone = userGames.filter((item: gameManager.GameItemDynamoDB) =>
+        item.GameState === gameManager.GameStates.Pending
     );
  
-    usersNotDone.forEach((game: GameItemDynamoDB) => {
+    usersNotDone.forEach((game: gameManager.GameItemDynamoDB) => {
         console.log("This user has not completed their round " + game.UserId);
     });
 

@@ -23,8 +23,7 @@ describe('gameManager', () => {
     const putSpy = jest.spyOn(dynamoDao, 'put');
     const getByKeySpy = jest.spyOn(dynamoDao, 'getItemsByIndexAndSortKey');
     const transactPutSpy = jest.spyOn(dynamoDao, 'transactPut');
-    const udpateKeySpy = jest.spyOn(dynamoDao, 'updateItemWithKeyChange');
-    const udpateKeysSpy = jest.spyOn(dynamoDao, 'updateItemsWithKeyChange');
+    const bulkUpdateSpy = jest.spyOn(dynamoDao, 'bulkUpdateForParitionKey');
 
     beforeEach(() => {
         idMinterSpy.mockImplementation(() => newlyMintedId);
@@ -32,8 +31,7 @@ describe('gameManager', () => {
         dateSpy.mockImplementation(() => dateTimeEpoch);
         putSpy.mockImplementation((arg) => Promise.resolve());
         transactPutSpy.mockImplementation((...arg) => Promise.resolve());
-        udpateKeySpy.mockImplementation((oldItem, newItem) => Promise.resolve());
-        udpateKeysSpy.mockImplementation((oldItems, newItem) => Promise.resolve());
+        bulkUpdateSpy.mockImplementation((oldItem, newItem) => Promise.resolve());
     });
 
     afterEach(() => {
@@ -42,24 +40,26 @@ describe('gameManager', () => {
         putSpy.mockClear();
         getByKeySpy.mockClear();
         transactPutSpy.mockClear();
-        udpateKeySpy.mockClear();
-        udpateKeysSpy.mockClear();
+        bulkUpdateSpy.mockClear();
     });
 
     describe('createNewGame', () => {
         const expectedUserGameItem = {
-            PartitionKey: sampleUserId,
-            SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + newlyMintedId,
-            Gsi: newlyMintedId,
-            GsiSortKey: gameManager.GamePrefix + '|' + sampleUserId,
+            PartitionKey: newlyMintedId,
+            SortKey: gameManager.createGameItemSortKey(sampleUserId),
+            Gsi: sampleUserId,
+            GsiSortKey: gameManager.createGameItemGSISortKey(gameManager.GameStates.Pending, newlyMintedId),
             Nickname: sampleNickName,
             Round: 1,
             GameId: newlyMintedId,
             UserId: sampleUserId,
             Host: true,
-            State: gameManager.GameStates.Pending,
+            GameState: gameManager.GameStates.Pending,
             CreatedDateTime: dateTimeString,
             Scores: {
+                scores: []
+            },
+            LastRoundScores: {
                 scores: []
             }
         } as gameManager.GameItemDynamoDB;
@@ -101,18 +101,21 @@ describe('gameManager', () => {
         const sampleGameId = 'gameId';
 
         const expectedUserGameItem = {
-            PartitionKey: sampleUserId,
-            SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + sampleGameId,
-            Gsi: sampleGameId,
-            GsiSortKey: gameManager.GamePrefix + '|' + sampleUserId,
+            PartitionKey: sampleGameId,
+            SortKey: gameManager.createGameItemSortKey(sampleUserId),
+            Gsi: sampleUserId,
+            GsiSortKey: gameManager.createGameItemGSISortKey(gameManager.GameStates.Pending, sampleGameId),
             Nickname: sampleNickName,
             Round: 1,
             GameId: sampleGameId,
             UserId: sampleUserId,
             Host: false,
-            State: gameManager.GameStates.Pending,
+            GameState: gameManager.GameStates.Pending,
             CreatedDateTime: dateTimeString,
             Scores: {
+                scores: []
+            },
+            LastRoundScores: {
                 scores: []
             }
         } as gameManager.GameItemDynamoDB;
@@ -151,6 +154,7 @@ describe('gameManager', () => {
         const score1 = 1;
         const score2 = 0;
         const sampleRound = 1;
+        const state = gameManager.GameStates.Pending;
         
         const expectedGetGameResponse = {
             host: {
@@ -163,10 +167,12 @@ describe('gameManager', () => {
                 {
                     userId: hostUserId,
                     nickname: userId1Nickname,
+                    state: state
                 }, 
                 {
                     userId: otherUserId,
                     nickname: userId2Nickname,
+                    state: state
                 }
             ]
         } as gameManager.GetGameResponse;
@@ -179,7 +185,8 @@ describe('gameManager', () => {
                     Score: score1,
                     Host: true,
                     UserId: hostUserId,
-                    Round: sampleRound
+                    Round: sampleRound,
+                    GameState: state
                 } as {[key: string]: any; },
                 {
                     PartitionKey: otherUserId,
@@ -187,7 +194,8 @@ describe('gameManager', () => {
                     Score: score2,
                     Host: false,
                     UserId: otherUserId,
-                    Round: sampleRound
+                    Round: sampleRound,
+                    GameState: state
                 }as {[key: string]: any; }
             ]));
         });
@@ -207,11 +215,11 @@ describe('gameManager', () => {
 
             expect(getByKeySpy).toBeCalledTimes(1);
             expect(getByKeySpy).toBeCalledWith({
-                indexName: dynamoDao.GSI_KEY, 
+                indexName: dynamoDao.PRIMARY_KEY, 
                 indexValue: newlyMintedId
             },{
-                sortKeyName: dynamoDao.GSI_SORT_KEY,
-                sortKeyPrefix: gameManager.GamePrefix
+                sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
+                sortKeyPrefix: gameManager.createGameItemSortKey()
             });
         });
     });
@@ -267,7 +275,7 @@ describe('gameManager', () => {
                     UserId: userId,
                     GameId: gameId1,
                     Round: sampleRound,
-                    State: sampleState,
+                    GameState: sampleState,
                     Scores: sampleScores1
                 } as {[key: string]: any; },
                 {
@@ -276,7 +284,7 @@ describe('gameManager', () => {
                     UserId: userId,
                     GameId: gameId2,
                     Round: sampleRound,
-                    State: sampleState,
+                    GameState: sampleState,
                     Scores: sampleScores2
                 }as {[key: string]: any; }
             ]));
@@ -294,11 +302,11 @@ describe('gameManager', () => {
     
                 expect(getByKeySpy).toBeCalledTimes(1);
                 expect(getByKeySpy).toBeCalledWith({
-                    indexName: dynamoDao.PRIMARY_KEY, 
+                    indexName: dynamoDao.GSI_KEY, 
                     indexValue: userId
                 }, {
-                    sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
-                    sortKeyPrefix: gameManager.GamePrefix + "|"
+                    sortKeyName: dynamoDao.GSI_SORT_KEY,
+                    sortKeyPrefix: gameManager.createPartialGameItemGSISortKey()
                 });
             });
     
@@ -316,12 +324,12 @@ describe('gameManager', () => {
     
                 expect(getByKeySpy).toBeCalledTimes(1);
                 expect(getByKeySpy).toBeCalledWith({
-                    indexName: dynamoDao.PRIMARY_KEY, 
+                    indexName: dynamoDao.GSI_KEY, 
                     indexValue: userId
                 }, 
                 {
-                    sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
-                    sortKeyPrefix: gameManager.GamePrefix + '|' + sampleState
+                    sortKeyName: dynamoDao.GSI_SORT_KEY,
+                    sortKeyPrefix: gameManager.createPartialGameItemGSISortKey(sampleState)
                 });
             });
 
@@ -333,7 +341,8 @@ describe('gameManager', () => {
             beforeEach(() => {
                 getByKeySpy.mockImplementation((index, sort?) =>
                     Promise.resolve([{
-                        PartitionKey: sampleUserId,
+                        PartitionKey: sampleGameId,
+                        SortKey: sampleUserId,
                         UserId: sampleUserId,
                         GameId: sampleGameId,
                         State: gameManager.GameStates.Pending
@@ -350,11 +359,11 @@ describe('gameManager', () => {
 
                 expect(getByKeySpy).toHaveBeenCalledTimes(1);
                 expect(getByKeySpy).toHaveBeenCalledWith({
-                    indexName: dynamoDao.PRIMARY_KEY,
+                    indexName: dynamoDao.GSI_KEY,
                     indexValue: sampleUserId
                 }, {
-                    sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
-                    sortKeyPrefix: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + sampleGameId
+                    sortKeyName: dynamoDao.GSI_SORT_KEY,
+                    sortKeyPrefix: gameManager.createGameItemGSISortKey(gameManager.GameStates.Pending, sampleGameId)
                 });
             });
 
@@ -364,19 +373,18 @@ describe('gameManager', () => {
                     gameId: sampleGameId
                 });
 
-                expect(udpateKeySpy).toHaveBeenCalledTimes(1);
-                expect(udpateKeySpy).toHaveBeenLastCalledWith(
+                expect(bulkUpdateSpy).toHaveBeenCalledTimes(1);
+                expect(bulkUpdateSpy).toHaveBeenLastCalledWith(
+                    sampleGameId,
+                    [sampleUserId],
+                    [{
+                        name: dynamoDao.GSI_SORT_KEY,
+                        value: gameManager.createGameItemGSISortKey(gameManager.GameStates.Waiting, sampleGameId)
+                    },
                     {
-                        PartitionKey: sampleUserId,
-                        SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + sampleGameId
-                    }, 
-                    {
-                        PartitionKey: sampleUserId,
-                        SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Waiting + '|' + sampleGameId,
-                        State: gameManager.GameStates.Waiting,
-                        GameId: sampleGameId,
-                        UserId: sampleUserId
-                    }
+                        name: 'GameState',
+                        value: gameManager.GameStates.Waiting
+                    }]
                 );
             });
         })
@@ -401,14 +409,56 @@ describe('gameManager', () => {
         const userId1 = 'userId1';
         const userId2 = 'userId2';
         const userId3 = 'userId3';
+        const updatedGameScore: GameScore = {
+            scores: [
+                {
+                    userId: userId1,
+                    nickname: 'blah',
+                    score: 1
+                },
+                {
+                    userId: userId2,
+                    nickname: 'blah2',
+                    score: 3
+                },
+                {
+                    userId: userId3,
+                    nickname: 'blah3',
+                    score: 5
+                }
+            ]
+        };
+        const initialGameScore: GameScore = {
+            scores: [
+                {
+                    userId: userId1,
+                    nickname: 'blah',
+                    score: 0
+                },
+                {
+                    userId: userId2,
+                    nickname: 'blah2',
+                    score: 0
+                },
+                {
+                    userId: userId3,
+                    nickname: 'blah3',
+                    score: 0
+                }
+            ]
+        };
         
         const sampleRound = 1;
 
         beforeEach(() => {
             gameManager.startNewRound(
-                createWaitingDynamoItem(userId1, sampleRound),
-                createWaitingDynamoItem(userId2, sampleRound),
-                createWaitingDynamoItem(userId3, sampleRound)
+                sampleGameId,
+                sampleRound,
+                initialGameScore,
+                updatedGameScore,
+                userId1,
+                userId2,
+                userId3
             );
         });
 
@@ -418,49 +468,90 @@ describe('gameManager', () => {
         });
 
         it('updates dynamo with the new keys', () => {
-            expect(udpateKeysSpy).toHaveBeenCalledTimes(1);
-            expect(udpateKeysSpy).toHaveBeenCalledWith([
-                createWaitingDynamoItem(userId1, sampleRound),
-                createWaitingDynamoItem(userId2, sampleRound),
-                createWaitingDynamoItem(userId3, sampleRound)
-            ], [
-                createPendingDynamoItem(userId1, sampleRound + 1),
-                createPendingDynamoItem(userId2, sampleRound + 1),
-                createPendingDynamoItem(userId3, sampleRound + 1)
-            ]);
+            expect(bulkUpdateSpy).toHaveBeenCalledTimes(1);
+            expect(bulkUpdateSpy).toHaveBeenCalledWith(
+                sampleGameId,
+                [
+                    gameManager.createGameItemSortKey(userId1), 
+                    gameManager.createGameItemSortKey(userId2), 
+                    gameManager.createGameItemSortKey(userId3)
+                ],
+                [
+                    {
+                        name: dynamoDao.GSI_SORT_KEY, 
+                        value: gameManager.createGameItemGSISortKey(gameManager.GameStates.Pending, sampleGameId)                  
+                    },
+                    {
+                        name: 'Round',
+                        value: sampleRound + 1                  
+                    },
+                    {
+                        name: 'GameState',
+                        value: gameManager.GameStates.Pending
+                    },
+                    {
+                        name: 'CreatedDateTime',
+                        value: dateTimeString
+                    },
+                    {
+                        name: 'Scores',
+                        value: updatedGameScore
+                    },
+                    {
+                        name: 'LastRoundScores',
+                        value: initialGameScore
+                    },
+                ]    
+            );
         })
-
-        const createPendingDynamoItem = (userId: string, round: number): gameManager.GameItemDynamoDB => {
-            return {
-                PartitionKey: sampleUserId,
-                SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Pending + '|' + sampleGameId,
-                UserId: userId,
-                GameId: sampleGameId,
-                Round: round,
-                Host: true,
-                Nickname: sampleNickName,
-                State: gameManager.GameStates.Pending,
-                CreatedDateTime: dateTimeString,
-                Scores: {
-                    scores: []
-                }
-            };
-        };
     
         const createWaitingDynamoItem = (userId: string, round: number): gameManager.GameItemDynamoDB => {
             return {
                 PartitionKey: sampleUserId,
-                SortKey: gameManager.GamePrefix + '|' + gameManager.GameStates.Waiting + '|' + sampleGameId,
+                SortKey: 'gameManager.GamePrefix' + '|' + gameManager.GameStates.Waiting + '|' + sampleGameId,
                 UserId: userId,
                 GameId: sampleGameId,
                 Round: round,
                 Host: true,
                 Nickname: sampleNickName,
-                State: gameManager.GameStates.Waiting,
-                Scores: {
-                    scores: []
-                }
+                GameState: gameManager.GameStates.Waiting,
+                Scores: updatedGameScore,
+                LastRoundScores: initialGameScore
             };
         };    
+    });
+
+    describe('updateScores', () => {
+        const sampleUserId2 = 'userId2';
+        const sampleNickname2 = 'nickname2';
+
+        const sampleGameScore: GameScore = {
+            scores: [{
+                userId: sampleUserId,
+                nickname: sampleNickName,
+                score: 4
+            }, {
+                userId: sampleUserId2,
+                nickname: sampleNickname2,
+                 score: 2
+            }]
+        }
+
+        it('calls bulkUpdate with the correct params', async () => {
+            await gameManager.updateScores(sampleGameScore, sampleGameId, sampleUserId, sampleUserId2);
+            
+            expect(bulkUpdateSpy).toHaveBeenCalledTimes(1);
+            expect(bulkUpdateSpy).toHaveBeenCalledWith(
+                sampleGameId,
+                [
+                    gameManager.createGameItemSortKey(sampleUserId),
+                    gameManager.createGameItemSortKey(sampleUserId2)
+                ],
+                [{
+                    name: 'Scores',
+                    value: sampleGameScore
+                }]
+            );
+        });
     });
 });

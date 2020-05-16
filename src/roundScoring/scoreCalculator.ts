@@ -3,6 +3,8 @@ import * as answerManager from "../manager/answerManager";
 import { GameItemDynamoDB } from "../manager/gameManager";
 import { GameScore, Score } from "./roundScorerManager";
 
+const STRIKE_THRESHOLD = 1;
+
 export const calculate = async (gameId: string, round: number, users: GameItemDynamoDB[]): Promise<GameScore> => {
     const answers = await dynamoDao.getItemsByIndexAndSortKey({
         indexName: dynamoDao.GSI_KEY,
@@ -19,13 +21,13 @@ export const calculate = async (gameId: string, round: number, users: GameItemDy
 
     const answerCountPerQuestion= countAnswersPerQuestion(answers);
 
-    const usersScores = createInitialScoreMap(users);
+    const usersScores = createInitialScoreMap(users, round);
 
     answers.forEach((value: answerManager.AnswerDynamoItem) => {
         const numberOfAnswers = answerCountPerQuestion.get(value.QuestionNumber)!!.get(value.Answer.toLowerCase());
         console.log("NumberOfAnswers: " + numberOfAnswers + ", for: " + value.Answer);
 
-        if (numberOfAnswers == 1 && value.Answer.toLowerCase().startsWith(questions.letter.toLowerCase())) {
+        if (numberOfAnswers == 1 && validAnwser(value, questions)) {
             let currentScore = usersScores.get(value.UserId)!!;
 
             usersScores.set(value.UserId, {
@@ -61,7 +63,7 @@ const countAnswersPerQuestion = (answers: answerManager.AnswerDynamoItem[]) => {
     return answerCountPerQuestion;
 };
 
-const createInitialScoreMap = (userGames: GameItemDynamoDB[]) => {
+const createInitialScoreMap = (userGames: GameItemDynamoDB[], round: number) => {
     const usersScores = new Map<string, Score>();
     
     userGames.forEach(userGames => {
@@ -72,10 +74,28 @@ const createInitialScoreMap = (userGames: GameItemDynamoDB[]) => {
         });
     });
 
+    let initialScores = userGames[0].Scores;
 
-    userGames[0].Scores.scores.forEach(score => {
+    if (userGames[0].Round !== round) {
+        initialScores = userGames[0].LastRoundScores;
+    }
+
+    console.log('InitialScores : ' + JSON.stringify(initialScores));
+
+    initialScores.scores.forEach(score => {
         usersScores.set(score.userId, score);
     });
 
+    usersScores.forEach((value, key) => {
+        console.log('Value = ' + JSON.stringify(value));
+        console.log('Key = ' + key);
+    });
+
     return usersScores;
+};
+
+const validAnwser = (answer: answerManager.AnswerDynamoItem, questions: answerManager.GetQuestionsResponse): boolean => {
+    const uniqueStrikes = answer.Strikes.filter((value, index, array) => array.indexOf(value) === index);
+
+    return answer.Answer.toLowerCase().startsWith(questions.letter.toLowerCase()) && uniqueStrikes.length < STRIKE_THRESHOLD;
 };
