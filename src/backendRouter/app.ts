@@ -7,10 +7,12 @@ import {
     joinGame, 
     getGame, 
     getGamesForUser, 
-    endRound
+    endRound,
+    startGame
 } from '../manager/gameManager';
 import compression from 'compression';
 import { getQuestions, putAnswer, getAnswers, reportAnswer } from '../manager/answerManager';
+import { putCustomCategory } from '../manager/questionManager';
 
 const app = express();
 const router = express.Router();
@@ -86,6 +88,17 @@ router.post('/ROUND/:userId/:gameId', async(req, res) => {
     res.json({});
 });
 
+router.put('/QUESTION/:gameId', async(req, res) => {
+    await putCustomCategory(req.params.gameId, req.body.category);
+
+    res.json({});
+});
+
+router.put('/START/:userId/:gameId', async (req, res) => {
+    await startGame(req.params.gameId, req.params.userId);
+
+    res.json({});
+});
 
 app.use('/', router);
 

@@ -2,7 +2,7 @@ import * as dynamoDao from '../../src/dao/dynamoDao';
 import * as gameManager from '../../src/manager/gameManager';
 import { GameStates, createGameItemGSISortKey } from '../../src/manager/gameManager';
 import { defaultCategories } from '../../src/manager/defaultCategories';
-import { putAnswer, AnswerPrefix, getQuestions, QuestionPrefx, getAnswers, reportAnswer, createAnswerDynamoSortKey } from '../../src/manager/answerManager';
+import { putAnswer, AnswerPrefix, getQuestions, QuestionPrefx, getAnswers, reportAnswer, createAnswerDynamoSortKey, createQuestionSortKey } from '../../src/manager/answerManager';
 
 describe('answerManager', () => {
     describe('getQuestions', () => {
@@ -39,7 +39,7 @@ describe('answerManager', () => {
                     },
                     {
                         sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
-                        sortKeyPrefix: QuestionPrefx + '|' + sampleRound    
+                        sortKeyPrefix: createQuestionSortKey(sampleRound)    
                     });
             });
         

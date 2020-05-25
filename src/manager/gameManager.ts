@@ -1,7 +1,9 @@
 import * as dynamoDao from '../dao/dynamoDao'
 import * as idMinter from './idMinter';
-import { createQuestionRecord } from './answerManager';
+import * as gameManager from './gameManager';
+import * as questionManager from './questionManager';
 import { GameScore } from '../roundScoring/roundScorerManager';
+import { createCustomCategoryRecord } from './questionManager';
 
 export interface CreateNewGameRequest {
     userId: string,
@@ -71,7 +73,8 @@ export interface BasicGameInfo {
   gameId: string,
   state: GameStates,
   round: number,
-  scores: GameScore
+  scores: GameScore,
+  isHost: boolean
 };
 
 const GamePrefix = 'GAME';
@@ -100,6 +103,8 @@ export function createPartialGameItemGSISortKey(state: string = ""): string {
   return GamePrefix + '#' + state;
 }
 
+const initialGameScore: GameScore = { scores: [] };
+
 export async function createNewGame(request: CreateNewGameRequest) : Promise<CreateNewGameResponse> {
   console.log(JSON.stringify(request));
 
@@ -111,14 +116,14 @@ export async function createNewGame(request: CreateNewGameRequest) : Promise<Cre
       PartitionKey: gameId,
       SortKey: createGameItemSortKey(request.userId),
       Gsi: request.userId,
-      GsiSortKey: createGameItemGSISortKey(GameStates.Pending, gameId),
+      GsiSortKey: createGameItemGSISortKey(GameStates.Created, gameId),
       Nickname: request.nickname,
       Round: 1,
       UserId: request.userId,
       GameId: gameId,
       Host: true,
       CreatedDateTime: dateString,
-      GameState: GameStates.Pending,
+      GameState: GameStates.Created,
       Scores: {
         scores: []
       },
@@ -126,7 +131,7 @@ export async function createNewGame(request: CreateNewGameRequest) : Promise<Cre
         scores: []
       }
     } as GameItemDynamoDB,
-    createQuestionRecord(gameId, 1, dateString)
+    createCustomCategoryRecord(gameId)
   ).then(() => {
     return {
       userId: request.userId,
@@ -144,14 +149,14 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
     PartitionKey: request.gameId,
     SortKey: createGameItemSortKey(request.userId),
     Gsi: request.userId,
-    GsiSortKey: createGameItemGSISortKey(GameStates.Pending, request.gameId),
+    GsiSortKey: createGameItemGSISortKey(GameStates.Created, request.gameId),
     Nickname: request.nickname,
     Round: 1,
     UserId: request.userId,
     GameId: request.gameId,
     Host: false,
     CreatedDateTime: dateString,
-    GameState: GameStates.Pending,
+    GameState: GameStates.Created,
     Scores: {
       scores: []
     },
@@ -166,6 +171,38 @@ export async function joinGame(request: JoinGameRequest): Promise <JoinGameRespo
       gameId: request.gameId
     }
   });
+};
+
+export async function startGame(gameId: string, userId: string): Promise<void> {
+  console.log("The user : " + userId);
+  
+  const getGameResponse = await gameManager.getGame({gameId: gameId});
+
+  console.log("The hostId : " + getGameResponse.host.userId);
+
+  if (getGameResponse.host.userId !== userId) {
+    return Promise.reject(new Error("user is not the host and is not allowed to start the game"))
+  }
+
+  if(getGameResponse.players[0].state !== GameStates.Created) {
+    return Promise.reject(new Error("Game is not in created state"))
+  }
+
+  await questionManager.setupQuestionsForRounds(gameId);
+
+  return gameManager.startNewRound(gameId, 
+    0, 
+    initialGameScore, 
+    {
+      scores: getGameResponse.players.map(player => {
+        return {
+          nickname: player.nickname,
+          userId: player.userId,
+          score: 0
+        }
+      })
+    }, 
+    ...getGameResponse.players.map(player => player.userId));
 };
 
 export async function getGamesForUser(userId: string, state = "") : Promise <GetGamesForUserResponse> {
@@ -187,7 +224,8 @@ export async function getGamesForUser(userId: string, state = "") : Promise <Get
             gameId: item.GameId,
             round: item.Round,
             scores: item.Scores,
-            state: item.GameState
+            state: item.GameState,
+            isHost: item.Host
           }
         })
       }}
@@ -265,8 +303,6 @@ export async function startNewRound(gameId: string, currentRound: number, oldSco
   const dateString = new Date(Date.now()).toISOString();
 
   const newRound = currentRound + 1;
-    
-  await dynamoDao.put(createQuestionRecord(gameId, newRound, dateString));
 
   const sortKeys = userIds.map(userId => createGameItemSortKey(userId));
   const attributesToUpdate: dynamoDao.AttributeNameValue[] = [

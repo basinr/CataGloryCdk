@@ -17,16 +17,9 @@ export interface QuestionDynamoDB extends dynamoDao.DynamoItem {
 
 export const QuestionPrefx = 'QUESTION';
 
-export const createQuestionRecord = (gameId: string, round: number, createdDateTime: string): QuestionDynamoDB => {
-    return {
-        PartitionKey: gameId,
-        SortKey: QuestionPrefx + '|' + round,
-        Letter: randomLetterGenerator.generate(),
-        Categories: defaultCategories[round - 1],
-        Round: round,
-        CreatedDateTime: createdDateTime
-    }
-};
+export const createQuestionSortKey = (round: number) => {
+    return QuestionPrefx + "#" + round
+}
 
 export interface GetQuestionsResponse {
     letter: string,
@@ -41,7 +34,7 @@ export async function getQuestions(gameId: string, round: number): Promise<GetQu
             indexValue: gameId
         }, {
             sortKeyName: dynamoDao.PRIMARY_SORT_KEY,
-            sortKeyPrefix: QuestionPrefx + '|' + round
+            sortKeyPrefix: createQuestionSortKey(round)
     })
     .then(items => {
         if (items.length == 0) {
@@ -155,7 +148,7 @@ export async function getAnswers(request: GetAnswersRequest): Promise<GetAnswers
             return items as AnswerDynamoItem[]
         })
         .then(items => {
-            items.forEach(row => {
+            items.map(row => {
                 answerResponse.answers.push({
                     questionNumber: row.QuestionNumber,
                     answer: row.Answer,

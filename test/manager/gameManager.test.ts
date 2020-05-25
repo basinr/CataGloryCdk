@@ -2,10 +2,10 @@ import * as dynamoDao from '../../src/dao/dynamoDao';
 import * as gameManager from '../../src/manager/gameManager';
 import * as idMinter from '../../src/manager/idMinter';
 import * as randomLetterGenerator from '../../src/manager/randomLetterGenerator';
-import { exitCode } from 'process';
-import { defaultCategories } from '../../src/manager/defaultCategories';
-import { QuestionPrefx, QuestionDynamoDB, createQuestionRecord } from '../../src/manager/answerManager';
+import * as questionManager from '../../src/manager/questionManager';
 import { GameScore } from '../../src/roundScoring/roundScorerManager';
+import { createCustomCategoryRecord } from '../../src/manager/questionManager';
+import { getGame } from '../../src/manager/gameManager';
 
 describe('gameManager', () => {
     const newlyMintedId = 'abc123';
@@ -24,6 +24,7 @@ describe('gameManager', () => {
     const getByKeySpy = jest.spyOn(dynamoDao, 'getItemsByIndexAndSortKey');
     const transactPutSpy = jest.spyOn(dynamoDao, 'transactPut');
     const bulkUpdateSpy = jest.spyOn(dynamoDao, 'bulkUpdateForParitionKey');
+    const setupQuestionsSpy = jest.spyOn(questionManager, 'setupQuestionsForRounds');
 
     beforeEach(() => {
         idMinterSpy.mockImplementation(() => newlyMintedId);
@@ -32,6 +33,7 @@ describe('gameManager', () => {
         putSpy.mockImplementation((arg) => Promise.resolve());
         transactPutSpy.mockImplementation((...arg) => Promise.resolve());
         bulkUpdateSpy.mockImplementation((oldItem, newItem) => Promise.resolve());
+        setupQuestionsSpy.mockImplementation(gameId => Promise.resolve());
     });
 
     afterEach(() => {
@@ -41,6 +43,7 @@ describe('gameManager', () => {
         getByKeySpy.mockClear();
         transactPutSpy.mockClear();
         bulkUpdateSpy.mockClear();
+        setupQuestionsSpy.mockClear();
     });
 
     describe('createNewGame', () => {
@@ -48,13 +51,13 @@ describe('gameManager', () => {
             PartitionKey: newlyMintedId,
             SortKey: gameManager.createGameItemSortKey(sampleUserId),
             Gsi: sampleUserId,
-            GsiSortKey: gameManager.createGameItemGSISortKey(gameManager.GameStates.Pending, newlyMintedId),
+            GsiSortKey: gameManager.createGameItemGSISortKey(gameManager.GameStates.Created, newlyMintedId),
             Nickname: sampleNickName,
             Round: 1,
             GameId: newlyMintedId,
             UserId: sampleUserId,
             Host: true,
-            GameState: gameManager.GameStates.Pending,
+            GameState: gameManager.GameStates.Created,
             CreatedDateTime: dateTimeString,
             Scores: {
                 scores: []
@@ -63,14 +66,7 @@ describe('gameManager', () => {
                 scores: []
             }
         } as gameManager.GameItemDynamoDB;
-        const expectedQuestion = {
-            PartitionKey: newlyMintedId,
-            SortKey: QuestionPrefx + '|' + 1,
-            Letter: randomlyGeneratedLetter,
-            Categories: defaultCategories[0],
-            Round: 1,
-            CreatedDateTime: dateTimeString
-        } as QuestionDynamoDB;
+        const expectedQuestion = createCustomCategoryRecord(newlyMintedId);
         const expectedCreateGameResponse = {
             userId: sampleUserId,
             gameId: newlyMintedId
@@ -104,13 +100,13 @@ describe('gameManager', () => {
             PartitionKey: sampleGameId,
             SortKey: gameManager.createGameItemSortKey(sampleUserId),
             Gsi: sampleUserId,
-            GsiSortKey: gameManager.createGameItemGSISortKey(gameManager.GameStates.Pending, sampleGameId),
+            GsiSortKey: gameManager.createGameItemGSISortKey(gameManager.GameStates.Created, sampleGameId),
             Nickname: sampleNickName,
             Round: 1,
             GameId: sampleGameId,
             UserId: sampleUserId,
             Host: false,
-            GameState: gameManager.GameStates.Pending,
+            GameState: gameManager.GameStates.Created,
             CreatedDateTime: dateTimeString,
             Scores: {
                 scores: []
@@ -143,6 +139,147 @@ describe('gameManager', () => {
             });
 
             expect(gameResponse).toStrictEqual(expectedJoinGameResponse);
+        });
+    });
+
+    describe('startGame', () => {
+        const userId = 'userId123';
+        const gameId = 'gameId123';
+        const round = 1;
+
+        const getGameSpy = jest.spyOn(gameManager, 'getGame');
+        const startNewRoundSpy = jest.spyOn(gameManager, 'startNewRound');
+
+        afterEach(() => {
+            getGameSpy.mockClear();
+            startNewRoundSpy.mockClear();
+        });
+        
+        afterAll(() => {
+            getGameSpy.mockRestore();
+            startNewRoundSpy.mockRestore();
+        });
+
+        describe('user is not the host', () => {
+            const wrongHostId = 'otherUser';
+
+            beforeEach(() => {
+                getGameSpy.mockImplementation(request => Promise.resolve({
+                    gameId: request.gameId,
+                    host: {
+                        userId: wrongHostId,
+                        nickname: 'otherGuy'
+                    },
+                    round: round,
+                    players: [
+                        {
+                            userId: userId,
+                            nickname: 'blah',
+                            state: gameManager.GameStates.Created
+                        }
+                    ]
+                }));
+            });
+
+            it('will throw an error', async () => {
+                await expect(gameManager.startGame(gameId, userId)).rejects.toBeInstanceOf(Error);
+                
+                expect(startNewRoundSpy).toHaveBeenCalledTimes(0);
+                expect(setupQuestionsSpy).toHaveBeenCalledTimes(0);
+            });
+        });
+
+        describe('game is not in created state', () => {
+            beforeEach(() => {
+                getGameSpy.mockImplementation(request => Promise.resolve({
+                    gameId: request.gameId,
+                    host: {
+                        userId: userId,
+                        nickname: 'otherGuy'
+                    },
+                    round: round,
+                    players: [
+                        {
+                            userId: userId,
+                            nickname: 'blah',
+                            state: gameManager.GameStates.Pending
+                        }
+                    ]
+                }));
+            });
+
+            it('will throw an error', async () => {
+                await expect(gameManager.startGame(gameId, userId)).rejects.toBeInstanceOf(Error);
+
+                expect(startNewRoundSpy).toHaveBeenCalledTimes(0);
+                expect(setupQuestionsSpy).toHaveBeenCalledTimes(0);
+            });
+        });
+
+        describe('this user is the host and in the correct state', () => {
+            const otherUserId = 'userId123';
+            const nickName1 = 'blah';
+            const otherNickName = 'foo';
+
+            beforeEach(() => {
+                getGameSpy.mockImplementation(request => Promise.resolve({
+                    gameId: request.gameId,
+                    host: {
+                        userId: userId,
+                        nickname: 'otherGuy'
+                    },
+                    round: round,
+                    players: [
+                        {
+                            userId: userId,
+                            nickname: nickName1,
+                            state: gameManager.GameStates.Created
+                        },
+                        {
+                            userId: otherUserId,
+                            nickname: otherNickName,
+                            state: gameManager.GameStates.Created
+                        }
+                    ]
+                }));
+
+            });
+            
+            it('will call startNewRound with the correct params', async () => {                
+                await gameManager.startGame(gameId, userId);
+
+                expect(startNewRoundSpy).toHaveBeenCalledTimes(1);
+                expect(startNewRoundSpy).toHaveBeenCalledWith(
+                    gameId,
+                    0,
+                    {
+                        scores: []
+                    },
+                    {
+                        scores: [
+                            {
+                                userId: userId,
+                                score: 0,
+                                nickname: nickName1
+                            },
+                            {
+                                userId: otherUserId,
+                                score: 0,
+                                nickname: otherNickName
+                            }
+                        ]
+                    },
+                    userId,
+                    otherUserId
+                );
+            });
+
+            it('will call setupQuestions with the correct params', async () => {                
+                await gameManager.startGame(gameId, userId);
+
+                expect(setupQuestionsSpy).toHaveBeenCalledTimes(1);
+                expect(setupQuestionsSpy).toHaveBeenCalledWith(gameId);
+            });
         });
     });
 
@@ -201,7 +338,7 @@ describe('gameManager', () => {
         });
 
         it('returns the expected', async () => {
-            const gameResponse = await gameManager.getGame({
+            const gameResponse = await getGame({
                 gameId: newlyMintedId
             });
 
@@ -209,7 +346,7 @@ describe('gameManager', () => {
         });
 
         it('calls the correct dao methods', async () => {
-            await gameManager.getGame({
+            await getGame({
                 gameId: newlyMintedId
             });
 
@@ -255,14 +392,16 @@ describe('gameManager', () => {
                     gameId: gameId1,
                     round: sampleRound,
                     state: sampleState,
-                    scores: sampleScores1
+                    scores: sampleScores1,
+                    isHost: true
                 },
                 {
                     userId: userId,
                     gameId: gameId2,
                     round: sampleRound,
                     state: sampleState,
-                    scores: sampleScores2
+                    scores: sampleScores2,
+                    isHost: false
                 }
             ]
         } as gameManager.GetGamesForUserResponse;
@@ -276,7 +415,8 @@ describe('gameManager', () => {
                     GameId: gameId1,
                     Round: sampleRound,
                     GameState: sampleState,
-                    Scores: sampleScores1
+                    Scores: sampleScores1,
+                    Host: true
                 } as {[key: string]: any; },
                 {
                     PartitionKey: userId,
@@ -285,7 +425,8 @@ describe('gameManager', () => {
                     GameId: gameId2,
                     Round: sampleRound,
                     GameState: sampleState,
-                    Scores: sampleScores2
+                    Scores: sampleScores2,
+                    Host: false
                 }as {[key: string]: any; }
             ]));
         });
@@ -460,11 +601,6 @@ describe('gameManager', () => {
                 userId2,
                 userId3
             );
-        });
-
-        it('puts a new question for the round', () => {
-            expect(putSpy).toHaveBeenCalledTimes(1);
-            expect(putSpy).toHaveBeenCalledWith(createQuestionRecord(sampleGameId, sampleRound + 1, dateTimeString))
         });
 
         it('updates dynamo with the new keys', () => {
